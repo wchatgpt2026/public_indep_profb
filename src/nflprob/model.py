@@ -83,6 +83,8 @@ class AffineTargetCalibrator:
 class NFLPredictor:
     """Independent NFL point model + calibrated full score distribution."""
 
+    CALIBRATION_PRIOR_CANDIDATES = (0.0, 100.0, 250.0, 500.0, 1000.0, 1_000_000.0)
+
     def __init__(self, random_state: int = 7, score_max: int = 80, oof_folds: int = 4) -> None:
         self.random_state = int(random_state)
         self.score_max = int(score_max)
@@ -109,6 +111,56 @@ class NFLPredictor:
             return games.sort_values(sort_cols, kind="stable").reset_index(drop=True)
         return games.reset_index(drop=True)
 
+    @classmethod
+    def _select_affine_calibrator(
+        cls,
+        predicted: np.ndarray,
+        actual: np.ndarray,
+    ) -> tuple[AffineTargetCalibrator, float, float]:
+        """Tune shrinkage on a later OOF slice, then refit using all OOF rows."""
+        predicted = np.asarray(predicted, dtype=float)
+        actual = np.asarray(actual, dtype=float)
+        valid = np.isfinite(predicted) & np.isfinite(actual)
+        predicted = predicted[valid]
+        actual = actual[valid]
+        if len(predicted) < 60:
+            strength = 250.0
+            return (
+                AffineTargetCalibrator.fit(predicted, actual, prior_strength=strength),
+                strength,
+                float("nan"),
+            )
+
+        split = max(40, int(len(predicted) * 0.75))
+        split = min(split, len(predicted) - 20)
+        train_pred, validation_pred = predicted[:split], predicted[split:]
+        train_actual, validation_actual = actual[:split], actual[split:]
+
+        best_strength = cls.CALIBRATION_PRIOR_CANDIDATES[-1]
+        best_mae = float("inf")
+        for strength in cls.CALIBRATION_PRIOR_CANDIDATES:
+            candidate = AffineTargetCalibrator.fit(
+                train_pred,
+                train_actual,
+                prior_strength=strength,
+            )
+            score = float(mean_absolute_error(validation_actual, candidate.predict(validation_pred)))
+            if score < best_mae - 1e-12 or (
+                abs(score - best_mae) <= 1e-12 and strength > best_strength
+            ):
+                best_mae = score
+                best_strength = strength
+
+        return (
+            AffineTargetCalibrator.fit(
+                predicted,
+                actual,
+                prior_strength=best_strength,
+            ),
+            float(best_strength),
+            best_mae,
+        )
+
     def fit(self, games: pd.DataFrame, feature_columns: list[str] | None = None) -> NFLPredictor:
         required = {"home_score", "away_score"}
         missing = required - set(games.columns)
@@ -133,11 +185,21 @@ class NFLPredictor:
         if oof_mask.sum() < 50:
             raise ValueError("not enough chronological out-of-fold predictions for calibration")
 
-        self.margin_calibrator_ = AffineTargetCalibrator.fit(
-            raw_oof_margin[oof_mask], actual_margin[oof_mask]
+        (
+            self.margin_calibrator_,
+            margin_prior_strength,
+            margin_calibration_validation_mae,
+        ) = self._select_affine_calibrator(
+            raw_oof_margin[oof_mask],
+            actual_margin[oof_mask],
         )
-        self.total_calibrator_ = AffineTargetCalibrator.fit(
-            raw_oof_total[oof_mask], actual_total[oof_mask]
+        (
+            self.total_calibrator_,
+            total_prior_strength,
+            total_calibration_validation_mae,
+        ) = self._select_affine_calibrator(
+            raw_oof_total[oof_mask],
+            actual_total[oof_mask],
         )
         oof_margin = self.margin_calibrator_.predict(raw_oof_margin[oof_mask])
         oof_total = self.total_calibrator_.predict(raw_oof_total[oof_mask])
@@ -181,8 +243,12 @@ class NFLPredictor:
             ),
             "margin_calibration_scale": float(self.margin_calibrator_.scale),
             "margin_calibration_offset": float(self.margin_calibrator_.offset),
+            "margin_calibration_prior_strength": margin_prior_strength,
+            "margin_calibration_validation_mae": margin_calibration_validation_mae,
             "total_calibration_scale": float(self.total_calibrator_.scale),
             "total_calibration_offset": float(self.total_calibrator_.offset),
+            "total_calibration_prior_strength": total_prior_strength,
+            "total_calibration_validation_mae": total_calibration_validation_mae,
         }
         return self
 
