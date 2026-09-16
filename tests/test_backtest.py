@@ -67,3 +67,33 @@ def test_walk_forward_uses_only_prior_seasons(monkeypatch):
     assert predictions["backtest_season"].tolist() == [2020] * 3 + [2021] * 3 + [2022] * 3
     assert report["summary"]["seasons_tested"] == 3.0
     assert report["summary"]["games"] == 9.0
+
+
+def test_market_benchmark_uses_home_favored_spread_and_removes_moneyline_vig():
+    predictions = pd.DataFrame(
+        {
+            "actual_margin": [7.0, -3.0, 10.0],
+            "predicted_margin": [6.0, -1.0, 8.0],
+            "actual_total": [48.0, 41.0, 55.0],
+            "predicted_total": [47.0, 44.0, 52.0],
+            "home_win": [1.0, 0.0, 1.0],
+            "home_win_probability": [0.65, 0.40, 0.70],
+            "spread_line": [6.5, -2.5, 9.5],
+            "total_line": [47.5, 42.5, 54.5],
+            "home_moneyline": [-150.0, 120.0, -220.0],
+            "away_moneyline": [130.0, -140.0, 180.0],
+        }
+    )
+
+    raw = backtest._american_implied_probability(np.array([-150.0, 120.0]))
+    assert np.allclose(raw, [0.6, 100.0 / 220.0])
+
+    metrics = backtest._market_metrics(predictions)
+    assert metrics["market_margin_games"] == 3.0
+    assert np.isclose(metrics["market_margin_mae"], 0.5)
+    assert metrics["market_total_games"] == 3.0
+    assert np.isclose(metrics["market_total_mae"], (0.5 + 1.5 + 0.5) / 3.0)
+    assert metrics["market_moneyline_games"] == 3.0
+    assert np.isfinite(metrics["market_home_win_brier"])
+    assert np.isfinite(metrics["model_home_win_brier_same_games"])
+    assert metrics["market_moneyline_mean_overround"] > 0.0
