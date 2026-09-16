@@ -30,8 +30,60 @@ class PointPrediction:
         return (self.predicted_total - self.predicted_margin) / 2.0
 
 
+@dataclass(frozen=True)
+class AffineTargetCalibrator:
+    """Conservative affine correction learned from chronological OOF predictions.
+
+    The correction is expressed around the OOF prediction mean so slope and level can be
+    shrunk independently toward the identity mapping. That makes it useful for correcting
+    systematic regression-to-the-mean without letting a noisy calibration window make large
+    extrapolations.
+    """
+
+    center: float = 0.0
+    scale: float = 1.0
+    offset: float = 0.0
+
+    @classmethod
+    def fit(
+        cls,
+        predicted: np.ndarray,
+        actual: np.ndarray,
+        *,
+        prior_strength: float = 250.0,
+    ) -> AffineTargetCalibrator:
+        predicted = np.asarray(predicted, dtype=float)
+        actual = np.asarray(actual, dtype=float)
+        valid = np.isfinite(predicted) & np.isfinite(actual)
+        predicted = predicted[valid]
+        actual = actual[valid]
+        if len(predicted) < 20:
+            return cls()
+
+        center = float(predicted.mean())
+        pred_centered = predicted - center
+        variance_mass = float(np.dot(pred_centered, pred_centered))
+        if variance_mass <= np.finfo(float).eps:
+            raw_scale = 1.0
+        else:
+            actual_centered = actual - float(actual.mean())
+            raw_scale = float(np.dot(pred_centered, actual_centered) / variance_mass)
+
+        reliability = float(len(predicted) / (len(predicted) + max(prior_strength, 0.0)))
+        scale = 1.0 + reliability * (raw_scale - 1.0)
+        scale = float(np.clip(scale, 0.75, 1.25))
+        offset = reliability * float(np.mean(actual - predicted))
+        return cls(center=center, scale=scale, offset=offset)
+
+    def predict(self, values: np.ndarray | float) -> np.ndarray:
+        values = np.asarray(values, dtype=float)
+        return self.center + self.offset + self.scale * (values - self.center)
+
+
 class NFLPredictor:
     """Independent NFL point model + calibrated full score distribution."""
+
+    CALIBRATION_PRIOR_CANDIDATES = (0.0, 100.0, 250.0, 500.0, 1000.0, 1_000_000.0)
 
     def __init__(self, random_state: int = 7, score_max: int = 80, oof_folds: int = 4) -> None:
         self.random_state = int(random_state)
@@ -39,6 +91,8 @@ class NFLPredictor:
         self.oof_folds = int(oof_folds)
         self.feature_columns_: list[str] = []
         self.point_model_: MarginTotalEnsemble | None = None
+        self.margin_calibrator_ = AffineTargetCalibrator()
+        self.total_calibrator_ = AffineTargetCalibrator()
         self.distribution_: ScoreDistributionCalibrator | None = None
         self.training_metrics_: dict[str, float] = {}
 
@@ -56,6 +110,56 @@ class NFLPredictor:
         if sort_cols:
             return games.sort_values(sort_cols, kind="stable").reset_index(drop=True)
         return games.reset_index(drop=True)
+
+    @classmethod
+    def _select_affine_calibrator(
+        cls,
+        predicted: np.ndarray,
+        actual: np.ndarray,
+    ) -> tuple[AffineTargetCalibrator, float, float]:
+        """Tune shrinkage on a later OOF slice, then refit using all OOF rows."""
+        predicted = np.asarray(predicted, dtype=float)
+        actual = np.asarray(actual, dtype=float)
+        valid = np.isfinite(predicted) & np.isfinite(actual)
+        predicted = predicted[valid]
+        actual = actual[valid]
+        if len(predicted) < 60:
+            strength = 250.0
+            return (
+                AffineTargetCalibrator.fit(predicted, actual, prior_strength=strength),
+                strength,
+                float("nan"),
+            )
+
+        split = max(40, int(len(predicted) * 0.75))
+        split = min(split, len(predicted) - 20)
+        train_pred, validation_pred = predicted[:split], predicted[split:]
+        train_actual, validation_actual = actual[:split], actual[split:]
+
+        best_strength = cls.CALIBRATION_PRIOR_CANDIDATES[-1]
+        best_mae = float("inf")
+        for strength in cls.CALIBRATION_PRIOR_CANDIDATES:
+            candidate = AffineTargetCalibrator.fit(
+                train_pred,
+                train_actual,
+                prior_strength=strength,
+            )
+            score = float(mean_absolute_error(validation_actual, candidate.predict(validation_pred)))
+            if score < best_mae - 1e-12 or (
+                abs(score - best_mae) <= 1e-12 and strength > best_strength
+            ):
+                best_mae = score
+                best_strength = strength
+
+        return (
+            AffineTargetCalibrator.fit(
+                predicted,
+                actual,
+                prior_strength=best_strength,
+            ),
+            float(best_strength),
+            best_mae,
+        )
 
     def fit(self, games: pd.DataFrame, feature_columns: list[str] | None = None) -> NFLPredictor:
         required = {"home_score", "away_score"}
@@ -75,20 +179,49 @@ class NFLPredictor:
         X = train[self.feature_columns_].astype(float).to_numpy()
         home = train["home_score"].astype(float).to_numpy()
         away = train["away_score"].astype(float).to_numpy()
-        oof_margin, oof_total, oof_mask = self._expanding_oof(X, home, away)
+        actual_margin, actual_total = home - away, home + away
+
+        raw_oof_margin, raw_oof_total, oof_mask = self._expanding_oof(X, home, away)
         if oof_mask.sum() < 50:
             raise ValueError("not enough chronological out-of-fold predictions for calibration")
+
+        (
+            self.margin_calibrator_,
+            margin_prior_strength,
+            margin_calibration_validation_mae,
+        ) = self._select_affine_calibrator(
+            raw_oof_margin[oof_mask],
+            actual_margin[oof_mask],
+        )
+        (
+            self.total_calibrator_,
+            total_prior_strength,
+            total_calibration_validation_mae,
+        ) = self._select_affine_calibrator(
+            raw_oof_total[oof_mask],
+            actual_total[oof_mask],
+        )
+        oof_margin = self.margin_calibrator_.predict(raw_oof_margin[oof_mask])
+        oof_total = self.total_calibrator_.predict(raw_oof_total[oof_mask])
+
         seasons = (
             train["season"].to_numpy(dtype=float)
-            if "season" in train.columns else np.zeros(len(train), dtype=float)
+            if "season" in train.columns
+            else np.zeros(len(train), dtype=float)
         )
         self.distribution_ = ScoreDistributionCalibrator(score_max=self.score_max)
         self.distribution_.fit(
-            home[oof_mask], away[oof_mask], oof_margin[oof_mask], oof_total[oof_mask], seasons[oof_mask]
+            home[oof_mask],
+            away[oof_mask],
+            oof_margin,
+            oof_total,
+            seasons[oof_mask],
         )
+
         self.point_model_ = MarginTotalEnsemble(random_state=self.random_state).fit(X, home, away)
-        pred_margin, pred_total = self.point_model_.predict(X)
-        actual_margin, actual_total = home - away, home + away
+        raw_pred_margin, raw_pred_total = self.point_model_.predict(X)
+        pred_margin = self.margin_calibrator_.predict(raw_pred_margin)
+        pred_total = self.total_calibrator_.predict(raw_pred_total)
         self.training_metrics_ = {
             "games": float(len(train)),
             "margin_mae_in_sample": float(mean_absolute_error(actual_margin, pred_margin)),
@@ -96,6 +229,26 @@ class NFLPredictor:
             "total_mae_in_sample": float(mean_absolute_error(actual_total, pred_total)),
             "total_rmse_in_sample": float(mean_squared_error(actual_total, pred_total) ** 0.5),
             "oof_games_for_distribution": float(oof_mask.sum()),
+            "margin_mae_oof_raw": float(
+                mean_absolute_error(actual_margin[oof_mask], raw_oof_margin[oof_mask])
+            ),
+            "margin_mae_oof_calibrated": float(
+                mean_absolute_error(actual_margin[oof_mask], oof_margin)
+            ),
+            "total_mae_oof_raw": float(
+                mean_absolute_error(actual_total[oof_mask], raw_oof_total[oof_mask])
+            ),
+            "total_mae_oof_calibrated": float(
+                mean_absolute_error(actual_total[oof_mask], oof_total)
+            ),
+            "margin_calibration_scale": float(self.margin_calibrator_.scale),
+            "margin_calibration_offset": float(self.margin_calibrator_.offset),
+            "margin_calibration_prior_strength": margin_prior_strength,
+            "margin_calibration_validation_mae": margin_calibration_validation_mae,
+            "total_calibration_scale": float(self.total_calibrator_.scale),
+            "total_calibration_offset": float(self.total_calibrator_.offset),
+            "total_calibration_prior_strength": total_prior_strength,
+            "total_calibration_validation_mae": total_calibration_validation_mae,
         }
         return self
 
@@ -123,7 +276,12 @@ class NFLPredictor:
             raise RuntimeError("model is not fitted")
         frame = row.to_frame().T if isinstance(row, pd.Series) else row
         X = frame.reindex(columns=self.feature_columns_).astype(float).to_numpy()
-        margin, total = self.point_model_.predict(X)
+        raw_margin, raw_total = self.point_model_.predict(X)
+        # getattr keeps artifacts saved before the calibration layer backward compatible.
+        margin_calibrator = getattr(self, "margin_calibrator_", AffineTargetCalibrator())
+        total_calibrator = getattr(self, "total_calibrator_", AffineTargetCalibrator())
+        margin = margin_calibrator.predict(raw_margin)
+        total = total_calibrator.predict(raw_total)
         return PointPrediction(float(margin[0]), float(total[0]))
 
     def predict_distribution(self, row: pd.Series | pd.DataFrame) -> JointScoreDistribution:
