@@ -8,6 +8,7 @@ import pandas as pd
 
 from .backtest import walk_forward_backtest
 from .data import build_nflverse_dataset
+from .development import DEVELOPMENT_MAX_SEASON, development_feature_compare
 from .evaluation import evaluate_holdout
 from .model import NFLPredictor
 
@@ -34,7 +35,8 @@ def _write_frame(frame: pd.DataFrame, path: str) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="nflprob", description="Independent NFL probabilistic model"
+        prog="nflprob",
+        description="Independent NFL probabilistic model",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -71,6 +73,17 @@ def build_parser() -> argparse.ArgumentParser:
     p_backtest.add_argument("--min-train-games", type=int, default=500)
     p_backtest.add_argument("--score-max", type=int, default=80)
     p_backtest.add_argument("--predictions-output")
+
+    p_dev = sub.add_parser(
+        "dev-compare",
+        help="compare legacy vs pace/scoring features on the reserved pre-2022 window",
+    )
+    p_dev.add_argument("--data", required=True)
+    p_dev.add_argument("--start-season", type=int, default=2019)
+    p_dev.add_argument("--end-season", type=int, default=DEVELOPMENT_MAX_SEASON)
+    p_dev.add_argument("--min-train-games", type=int, default=500)
+    p_dev.add_argument("--score-max", type=int, default=80)
+    p_dev.add_argument("--predictions-output")
     return parser
 
 
@@ -86,7 +99,12 @@ def main(argv: list[str] | None = None) -> int:
         frame = _read_frame(args.data)
         model = NFLPredictor(score_max=args.score_max).fit(frame)
         model.save(args.model)
-        print(json.dumps({"model": args.model, "training_metrics": model.training_metrics_}, indent=2))
+        print(
+            json.dumps(
+                {"model": args.model, "training_metrics": model.training_metrics_},
+                indent=2,
+            )
+        )
         return 0
     if args.command == "price":
         model = NFLPredictor.load(args.model)
@@ -97,9 +115,17 @@ def main(argv: list[str] | None = None) -> int:
                 f"expected exactly one row for game_id={args.game_id!r}; found {len(matches)}"
             )
         row = matches.iloc[0]
-        print(json.dumps(model.price_game(row, home_spread=args.spread, total=args.total), indent=2))
+        print(
+            json.dumps(
+                model.price_game(row, home_spread=args.spread, total=args.total),
+                indent=2,
+            )
+        )
         if args.distribution_csv:
-            model.predict_distribution(row).to_frame().to_csv(args.distribution_csv, index=False)
+            model.predict_distribution(row).to_frame().to_csv(
+                args.distribution_csv,
+                index=False,
+            )
         return 0
     if args.command == "evaluate":
         model = NFLPredictor.load(args.model)
@@ -109,6 +135,20 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "backtest":
         frame = _read_frame(args.data)
         report, predictions = walk_forward_backtest(
+            frame,
+            start_season=args.start_season,
+            end_season=args.end_season,
+            min_train_games=args.min_train_games,
+            score_max=args.score_max,
+        )
+        if args.predictions_output:
+            _write_frame(predictions, args.predictions_output)
+            report["predictions_output"] = args.predictions_output
+        print(json.dumps(report, indent=2))
+        return 0
+    if args.command == "dev-compare":
+        frame = _read_frame(args.data)
+        report, predictions = development_feature_compare(
             frame,
             start_season=args.start_season,
             end_season=args.end_season,
