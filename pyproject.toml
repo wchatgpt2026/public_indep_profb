@@ -14,12 +14,13 @@ dependencies = [
   "joblib>=1.4",
   "numpy>=2.0",
   "pandas>=2.2",
+  "requests>=2.32",
   "scipy>=1.13",
   "scikit-learn>=1.5",
 ]
 
 [project.optional-dependencies]
-data = ["nflreadpy>=0.1.4", "pyarrow>=17", "requests>=2.32"]
+data = ["nflreadpy>=0.1.4", "pyarrow>=17"]
 dev = ["pytest>=8.3", "ruff>=0.6"]
 
 [project.scripts]
