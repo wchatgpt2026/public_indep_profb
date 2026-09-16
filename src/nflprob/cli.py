@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from .backtest import walk_forward_backtest
 from .data import build_nflverse_dataset
 from .evaluation import evaluate_holdout
 from .model import NFLPredictor
@@ -59,6 +60,17 @@ def build_parser() -> argparse.ArgumentParser:
     p_eval = sub.add_parser("evaluate", help="evaluate a fitted artifact on a holdout file")
     p_eval.add_argument("--model", required=True)
     p_eval.add_argument("--data", required=True)
+
+    p_backtest = sub.add_parser(
+        "backtest",
+        help="run season-by-season rolling-origin evaluation",
+    )
+    p_backtest.add_argument("--data", required=True)
+    p_backtest.add_argument("--start-season", type=int, required=True)
+    p_backtest.add_argument("--end-season", type=int)
+    p_backtest.add_argument("--min-train-games", type=int, default=500)
+    p_backtest.add_argument("--score-max", type=int, default=80)
+    p_backtest.add_argument("--predictions-output")
     return parser
 
 
@@ -93,6 +105,20 @@ def main(argv: list[str] | None = None) -> int:
         model = NFLPredictor.load(args.model)
         frame = _read_frame(args.data)
         print(json.dumps(evaluate_holdout(model, frame), indent=2))
+        return 0
+    if args.command == "backtest":
+        frame = _read_frame(args.data)
+        report, predictions = walk_forward_backtest(
+            frame,
+            start_season=args.start_season,
+            end_season=args.end_season,
+            min_train_games=args.min_train_games,
+            score_max=args.score_max,
+        )
+        if args.predictions_output:
+            _write_frame(predictions, args.predictions_output)
+            report["predictions_output"] = args.predictions_output
+        print(json.dumps(report, indent=2))
         return 0
     return 2
 
