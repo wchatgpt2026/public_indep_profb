@@ -7,6 +7,7 @@ The design is intentionally market-independent: sportsbook lines and odds are bl
 ## What is implemented
 
 - Leakage-safe pregame features from EPA/play, success rate, dropback/rush EPA, explosives, turnovers, sacks, CPOE, points, rest, weather/roof and an internal Elo rating.
+- An experimental, non-default pace/scoring feature block with prior-game snaps, drives, plays/drive, within-drive seconds/snap, no-huddle rate, early-down pass rate, red-zone EPA/success and scoring-drive rate, plus opponent-side counterparts.
 - Exponentially weighted team form with current-game data shifted out of every pregame row.
 - A quarterback state layer using prior-game QB EPA/CPOE, experience shrinkage, and strictly pre-kickoff lookup when starter IDs are available.
 - Separate **margin** and **total** ensembles: ridge + histogram gradient boosting + Extra Trees, with chronological validation used to learn non-negative blend weights.
@@ -14,6 +15,7 @@ The design is intentionally market-independent: sportsbook lines and odds are bl
 - A discrete **joint score distribution** based on ex-ante analog games plus recency weighting and maximum-entropy tilting to the point model's target home/away means.
 - Fair moneyline, spread and total pricing with push handling and fair decimal/American odds.
 - Season-by-season rolling-origin backtesting with calibration, naive historical baselines, and evaluation-only nflverse market benchmarks.
+- A guarded `dev-compare` workflow that strips market fields, compares the accepted feature set with experimental features only on 2019-2021, and refuses to enter the reserved 2022+ confirmation era.
 - CLI, serialization, holdout evaluation, unit tests and GitHub Actions CI.
 
 See [`docs/MODEL_CARD.md`](docs/MODEL_CARD.md) for assumptions and limitations.
@@ -38,7 +40,23 @@ nflprob build-data \
   --output data/games.parquet
 ```
 
-Train the artifact:
+The prepared dataset can contain experimental columns without changing normal model behavior. `nflprob train` and `nflprob backtest` continue to use the accepted legacy feature set unless an experiment is explicitly promoted in code.
+
+### Research candidate selection
+
+Use the reserved pre-2022 development window to compare the accepted feature set against the experimental pace/scoring block:
+
+```bash
+nflprob dev-compare \
+  --data data/games.parquet \
+  --start-season 2019 \
+  --end-season 2021 \
+  --predictions-output artifacts/dev_candidate_predictions.csv
+```
+
+`dev-compare` removes sportsbook columns before fitting or scoring either model and hard-fails if `--end-season` is later than 2021. Positive values in `candidate_vs_baseline_improvement_pct` mean the candidate reduced error versus the accepted feature set. Do not use the 2022+ market benchmark to iterate on candidate design.
+
+Train the accepted/default artifact:
 
 ```bash
 nflprob train \
@@ -46,7 +64,9 @@ nflprob train \
   --model artifacts/nfl_model.joblib
 ```
 
-Before treating the fitted artifact as operational, run a true rolling-origin backtest. Each test season is predicted by a fresh model trained only on completed games from earlier seasons:
+### Confirmation benchmark
+
+After a candidate has been selected on the development window, run the later rolling-origin confirmation benchmark once. Each test season is predicted by a fresh model trained only on completed games from earlier seasons:
 
 ```bash
 nflprob backtest \
@@ -105,11 +125,12 @@ That guarantees internally consistent prices: a moneyline, -3.5 spread and 47.5 
 
 ## Highest-value next extensions
 
-1. Timestamped injury/practice participation plus an explicit late-QB-scratch override path.
-2. Offensive-line continuity and skill-position availability features.
-3. Stadium-specific forecast weather captured as-of prediction time.
-4. Walk-forward hyperparameter search by season and calibration-temperature tuning based on the rolling-origin report.
-5. Automated weekly data refresh/retrain/publish workflow after the core backtest is accepted.
+1. Evaluate the pace/scoring candidate on the locked 2019-2021 development window and promote it only if it improves robustly.
+2. Timestamped injury/practice participation plus an explicit late-QB-scratch override path.
+3. Offensive-line continuity and skill-position availability features.
+4. Stadium-specific forecast weather captured as-of prediction time.
+5. Nested walk-forward hyperparameter and score-distribution tuning inside development-era data only.
+6. Automated weekly data refresh/retrain/publish workflow after the research protocol is accepted.
 
 ## Data attribution
 
