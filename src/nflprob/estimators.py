@@ -82,7 +82,7 @@ class EnsembleRegressor:
             _extra_trees(self.random_state + 2),
         ]
 
-    def fit(self, X: np.ndarray, y: np.ndarray) -> "EnsembleRegressor":
+    def fit(self, X: np.ndarray, y: np.ndarray) -> EnsembleRegressor:
         X = np.asarray(X, dtype=float)
         y = np.asarray(y, dtype=float)
         n = len(y)
@@ -144,7 +144,7 @@ class MarginTotalEnsemble:
         X: np.ndarray,
         home_score: np.ndarray,
         away_score: np.ndarray,
-    ) -> "MarginTotalEnsemble":
+    ) -> MarginTotalEnsemble:
         home_score = np.asarray(home_score, dtype=float)
         away_score = np.asarray(away_score, dtype=float)
         self.margin_model.fit(X, home_score - away_score)
