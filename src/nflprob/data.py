@@ -114,7 +114,7 @@ def _fallback_pbp(season: int) -> pd.DataFrame:
             if kind == "csv.gz":
                 return pd.read_csv(buffer, compression="gzip", low_memory=False)
             return pd.read_csv(buffer, low_memory=False)
-        except Exception as exc:  # try the next published format
+        except Exception as exc:  # noqa: BLE001 - deliberately try the next published format
             errors.append(f"{filename}: {exc}")
     detail = "; ".join(errors) if errors else "no matching release assets found"
     raise ConnectionError(f"Unable to load nflverse PBP for {season}: {detail}")
@@ -132,7 +132,7 @@ def _load_pbp_season(nfl: Any, season: int, attempts: int = 3) -> pd.DataFrame:
                 time.sleep(min(2**attempt, 4))
     try:
         return _fallback_pbp(season)
-    except Exception as fallback_error:
+    except ConnectionError as fallback_error:
         raise ConnectionError(
             f"nflreadpy and direct nflverse fallback both failed for {season}. "
             f"nflreadpy error: {last_error}; fallback error: {fallback_error}"
