@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-import nflprob.backtest as backtest
+from nflprob import backtest
 
 
 def test_walk_forward_uses_only_prior_seasons(monkeypatch):
