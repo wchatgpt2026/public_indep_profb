@@ -13,6 +13,7 @@ The design is intentionally market-independent: sportsbook lines and odds are bl
 - Expanding-window out-of-fold forecasts for distribution calibration.
 - A discrete **joint score distribution** based on ex-ante analog games plus recency weighting and maximum-entropy tilting to the point model's target home/away means.
 - Fair moneyline, spread and total pricing with push handling and fair decimal/American odds.
+- Season-by-season rolling-origin backtesting with calibration and naive historical baselines.
 - CLI, serialization, holdout evaluation, unit tests and GitHub Actions CI.
 
 See [`docs/MODEL_CARD.md`](docs/MODEL_CARD.md) for assumptions and limitations.
@@ -45,6 +46,18 @@ nflprob train \
   --model artifacts/nfl_model.joblib
 ```
 
+Before treating the fitted artifact as operational, run a true rolling-origin backtest. Each test season is predicted by a fresh model trained only on completed games from earlier seasons:
+
+```bash
+nflprob backtest \
+  --data data/games.parquet \
+  --start-season 2022 \
+  --end-season 2026 \
+  --predictions-output artifacts/walk_forward_predictions.csv
+```
+
+The report includes aggregate and season-level margin/total MAE and RMSE, home-moneyline Brier score, binary log loss, expected calibration error, exact-score negative log likelihood, and comparison against an expanding-history constant baseline. The predictions CSV is suitable for deeper calibration plots and error analysis.
+
 Price a scheduled game already present in the prepared dataset:
 
 ```bash
@@ -59,7 +72,7 @@ nflprob price \
 
 The JSON response includes projected home/away score, margin, total, two-way moneyline prices, spread prices and total prices. The optional CSV contains every score pair from 0-0 through 80-80 with its probability.
 
-Evaluate on a chronologically later holdout file:
+Evaluate on a separate chronologically later holdout file:
 
 ```bash
 nflprob evaluate --model artifacts/nfl_model.joblib --data data/holdout.parquet
@@ -93,7 +106,7 @@ That guarantees internally consistent prices: a moneyline, -3.5 spread and 47.5 
 1. Timestamped injury/practice participation plus an explicit late-QB-scratch override path.
 2. Offensive-line continuity and skill-position availability features.
 3. Stadium-specific forecast weather captured as-of prediction time.
-4. Walk-forward hyperparameter search by season and calibration-temperature tuning.
+4. Walk-forward hyperparameter search by season and calibration-temperature tuning based on the rolling-origin report.
 5. Automated weekly data refresh/retrain/publish workflow after the core backtest is accepted.
 
 ## Data attribution
