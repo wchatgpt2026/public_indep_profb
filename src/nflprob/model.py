@@ -10,10 +10,15 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 from .distribution import JointScoreDistribution, ScoreDistributionCalibrator
 from .estimators import MarginTotalEnsemble
-from .features import numeric_feature_columns
+from .features import PACE_SCORING_METRICS, numeric_feature_columns
 
 
 MARKET_TOKENS = ("moneyline", "spread_line", "total_line", "odds", "vegas", "market_")
+
+
+def is_experimental_feature(column: str) -> bool:
+    """Return whether a feature belongs to the unpromoted pace/scoring experiment."""
+    return any(column.endswith(metric) for metric in PACE_SCORING_METRICS)
 
 
 @dataclass(frozen=True)
@@ -67,7 +72,8 @@ class NFLPredictor:
         if len(train) < 120:
             raise ValueError("at least 120 completed games are required for fitting")
         if feature_columns is None:
-            feature_columns = numeric_feature_columns(train, extra_exclude={"season", "week"})
+            auto_columns = numeric_feature_columns(train, extra_exclude={"season", "week"})
+            feature_columns = [c for c in auto_columns if not is_experimental_feature(c)]
         self._assert_independent(feature_columns)
         if not feature_columns:
             raise ValueError("no numeric feature columns were selected")
@@ -80,11 +86,16 @@ class NFLPredictor:
             raise ValueError("not enough chronological out-of-fold predictions for calibration")
         seasons = (
             train["season"].to_numpy(dtype=float)
-            if "season" in train.columns else np.zeros(len(train), dtype=float)
+            if "season" in train.columns
+            else np.zeros(len(train), dtype=float)
         )
         self.distribution_ = ScoreDistributionCalibrator(score_max=self.score_max)
         self.distribution_.fit(
-            home[oof_mask], away[oof_mask], oof_margin[oof_mask], oof_total[oof_mask], seasons[oof_mask]
+            home[oof_mask],
+            away[oof_mask],
+            oof_margin[oof_mask],
+            oof_total[oof_mask],
+            seasons[oof_mask],
         )
         self.point_model_ = MarginTotalEnsemble(random_state=self.random_state).fit(X, home, away)
         pred_margin, pred_total = self.point_model_.predict(X)
@@ -100,7 +111,10 @@ class NFLPredictor:
         return self
 
     def _expanding_oof(
-        self, X: np.ndarray, home: np.ndarray, away: np.ndarray
+        self,
+        X: np.ndarray,
+        home: np.ndarray,
+        away: np.ndarray,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         n = len(home)
         min_train = max(80, int(n * 0.40))
@@ -134,7 +148,11 @@ class NFLPredictor:
         season = None
         if "season" in frame.columns and pd.notna(frame.iloc[0]["season"]):
             season = int(frame.iloc[0]["season"])
-        return self.distribution_.predict(point.predicted_margin, point.predicted_total, season=season)
+        return self.distribution_.predict(
+            point.predicted_margin,
+            point.predicted_total,
+            season=season,
+        )
 
     def price_game(
         self,
