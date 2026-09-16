@@ -167,7 +167,7 @@ class ScoreDistributionCalibrator:
         predicted_margins: np.ndarray,
         predicted_totals: np.ndarray,
         seasons: np.ndarray | None = None,
-    ) -> "ScoreDistributionCalibrator":
+    ) -> ScoreDistributionCalibrator:
         hs = np.asarray(home_scores, dtype=int)
         aw = np.asarray(away_scores, dtype=int)
         pm = np.asarray(predicted_margins, dtype=float)
