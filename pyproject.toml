@@ -19,7 +19,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-data = ["nflreadpy>=0.1.4", "pyarrow>=17"]
+data = ["nflreadpy>=0.1.4", "pyarrow>=17", "requests>=2.32"]
 dev = ["pytest>=8.3", "ruff>=0.6"]
 
 [project.scripts]
