@@ -57,7 +57,7 @@ class NFLPredictor:
             return games.sort_values(sort_cols, kind="stable").reset_index(drop=True)
         return games.reset_index(drop=True)
 
-    def fit(self, games: pd.DataFrame, feature_columns: list[str] | None = None) -> "NFLPredictor":
+    def fit(self, games: pd.DataFrame, feature_columns: list[str] | None = None) -> NFLPredictor:
         required = {"home_score", "away_score"}
         missing = required - set(games.columns)
         if missing:
@@ -176,7 +176,7 @@ class NFLPredictor:
         joblib.dump(self, path)
 
     @classmethod
-    def load(cls, path: str | Path) -> "NFLPredictor":
+    def load(cls, path: str | Path) -> NFLPredictor:
         obj = joblib.load(path)
         if not isinstance(obj, cls):
             raise TypeError("artifact is not an NFLPredictor")
