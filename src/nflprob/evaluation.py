@@ -62,7 +62,24 @@ def score_holdout(
             "home_win_probability": home_win_probability,
             "exact_score_probability": exact_probability,
         }
-        for column in ("game_id", "season", "week", "game_date", "home_team", "away_team"):
+        passthrough = (
+            "game_id",
+            "season",
+            "week",
+            "game_date",
+            "home_team",
+            "away_team",
+            # Evaluation-only market fields. NFLPredictor blocks these from training.
+            "spread_line",
+            "total_line",
+            "home_moneyline",
+            "away_moneyline",
+            "home_spread_odds",
+            "away_spread_odds",
+            "over_odds",
+            "under_odds",
+        )
+        for column in passthrough:
             if column in row.index and pd.notna(row[column]):
                 result[column] = row[column]
         rows.append(result)
