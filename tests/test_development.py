@@ -29,11 +29,13 @@ def test_dev_compare_strips_market_and_ablates_new_features(monkeypatch):
             "away_moneyline": [105, 115, -125, 120],
         }
     )
-    seen_columns = []
+    seen_frames = []
+    seen_features = []
 
-    def fake_backtest(frame, **kwargs):
+    def fake_backtest(frame, *, feature_columns, **kwargs):
         del kwargs
-        seen_columns.append(set(frame.columns))
+        seen_frames.append(set(frame.columns))
+        seen_features.append(set(feature_columns))
         report = {
             "summary": {
                 "margin_mae": 10.0,
@@ -50,17 +52,19 @@ def test_dev_compare_strips_market_and_ablates_new_features(monkeypatch):
         }
         return report, frame.copy()
 
-    monkeypatch.setattr(development, "walk_forward_backtest", fake_backtest)
+    monkeypatch.setattr(development, "_run_feature_backtest", fake_backtest)
     report, _ = development.development_feature_compare(games)
 
-    baseline_columns, candidate_columns = seen_columns
-    assert "spread_line" not in baseline_columns
-    assert "spread_line" not in candidate_columns
-    assert "home_moneyline" not in baseline_columns
-    assert "home_moneyline" not in candidate_columns
-    assert "home_pregame_off_plays" not in baseline_columns
-    assert "sum_off_plays" not in baseline_columns
-    assert "home_pregame_off_plays" in candidate_columns
-    assert "sum_off_plays" in candidate_columns
+    for frame_columns in seen_frames:
+        assert "spread_line" not in frame_columns
+        assert "total_line" not in frame_columns
+        assert "home_moneyline" not in frame_columns
+        assert "away_moneyline" not in frame_columns
+
+    baseline_features, candidate_features = seen_features
+    assert "home_pregame_off_plays" not in baseline_features
+    assert "sum_off_plays" not in baseline_features
+    assert "home_pregame_off_plays" in candidate_features
+    assert "sum_off_plays" in candidate_features
     assert report["development_window"]["reserved_confirmation_starts"] == 2022
     assert report["feature_counts"]["added"] == 2
