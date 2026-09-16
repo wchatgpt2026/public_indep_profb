@@ -1,0 +1,39 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "nflprob"
+version = "0.1.0"
+description = "Independent probabilistic NFL score model and market pricer"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [{name = "public_indep_profb contributors"}]
+dependencies = [
+  "joblib>=1.4",
+  "numpy>=2.0",
+  "pandas>=2.2",
+  "scipy>=1.13",
+  "scikit-learn>=1.5",
+]
+
+[project.optional-dependencies]
+data = ["nflreadpy>=0.1.4", "pyarrow>=17"]
+dev = ["pytest>=8.3", "ruff>=0.6"]
+
+[project.scripts]
+nflprob = "nflprob.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/nflprob"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+ignore = ["I001", "PIE810"]
