@@ -101,7 +101,7 @@ def walk_forward_backtest(
         if len(train) < min_train_games:
             skipped.append({
                 "season": int(season),
-                "train_games": int(len(train)),
+                "train_games": len(train),
                 "required_train_games": int(min_train_games),
             })
             continue
@@ -126,7 +126,7 @@ def walk_forward_backtest(
         predictions["baseline_total"] = float(train_total.mean())
         predictions["baseline_home_win_probability"] = baseline_home_win
         predictions["backtest_season"] = int(season)
-        predictions["train_games"] = int(len(train))
+        predictions["train_games"] = len(train)
         prediction_frames.append(predictions)
 
         model_metrics = metrics_from_predictions(predictions)
