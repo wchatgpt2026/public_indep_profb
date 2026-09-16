@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import math
-
 import numpy as np
 import pandas as pd
 from sklearn.metrics import brier_score_loss, mean_absolute_error, mean_squared_error
