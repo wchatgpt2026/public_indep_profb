@@ -6,7 +6,6 @@ import pandas as pd
 from .development import (
     COMPARISON_METRICS,
     DEVELOPMENT_MAX_SEASON,
-    EXPERIMENT_GROUP_METRICS,
     _comparison_improvements,
     _experimental_columns_by_group,
     _model_summary,
