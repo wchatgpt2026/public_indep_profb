@@ -10,8 +10,8 @@ The design is intentionally market-independent: sportsbook lines and odds are bl
 - Exponentially weighted team form with current-game data shifted out of every pregame row.
 - A quarterback state layer using prior-game QB EPA/CPOE, experience shrinkage, and strictly pre-kickoff lookup when starter IDs are available.
 - Separate **margin** and **total** ensembles: ridge + histogram gradient boosting + Extra Trees, with chronological validation used to learn non-negative blend weights.
-- Expanding-window out-of-fold forecasts with conservative affine point calibration; calibration shrinkage is selected on a later OOF slice and never on the test season.
-- A discrete **joint score distribution** based on ex-ante analog games plus recency weighting and maximum-entropy tilting to the calibrated point model's target home/away means.
+- Expanding-window out-of-fold forecasts for distribution calibration.
+- A discrete **joint score distribution** based on ex-ante analog games plus recency weighting and maximum-entropy tilting to the point model's target home/away means.
 - Fair moneyline, spread and total pricing with push handling and fair decimal/American odds.
 - Season-by-season rolling-origin backtesting with calibration, naive historical baselines, and evaluation-only nflverse market benchmarks.
 - CLI, serialization, holdout evaluation, unit tests and GitHub Actions CI.
@@ -45,8 +45,6 @@ nflprob train \
   --data data/games.parquet \
   --model artifacts/nfl_model.joblib
 ```
-
-The training report includes raw-versus-calibrated OOF MAE plus the selected margin/total calibration scale, offset, and shrinkage strength. These diagnostics are learned only from chronological OOF rows.
 
 Before treating the fitted artifact as operational, run a true rolling-origin backtest. Each test season is predicted by a fresh model trained only on completed games from earlier seasons:
 
@@ -101,7 +99,7 @@ print(dist.exact_score(27, 20))
 
 ## Modeling notes
 
-A full score model needs more than a normal approximation to margin. NFL final scores have visible scoring-number structure, home/away residual dependence and heavier tails than independent Poisson models usually imply. This project therefore uses the ML ensemble for the two economically important first moments (margin and total), applies a conservative training-only OOF correction for systematic level/scale bias, then calibrates a football-shaped joint discrete distribution from out-of-fold analog games and tilts that distribution to the current means.
+A full score model needs more than a normal approximation to margin. NFL final scores have visible scoring-number structure, home/away residual dependence and heavier tails than independent Poisson models usually imply. This project therefore uses the ML ensemble for the two economically important first moments (margin and total), then calibrates a football-shaped joint discrete distribution from out-of-fold analog games and tilts that distribution to the current means.
 
 That guarantees internally consistent prices: a moneyline, -3.5 spread and 47.5 total are all integrations of the **same** joint score matrix rather than separate classifiers that can contradict one another.
 
@@ -110,7 +108,7 @@ That guarantees internally consistent prices: a moneyline, -3.5 spread and 47.5 
 1. Timestamped injury/practice participation plus an explicit late-QB-scratch override path.
 2. Offensive-line continuity and skill-position availability features.
 3. Stadium-specific forecast weather captured as-of prediction time.
-4. Nested walk-forward model/hyperparameter search and distribution-temperature tuning after point calibration is benchmarked.
+4. Walk-forward hyperparameter search by season and calibration-temperature tuning based on the rolling-origin report.
 5. Automated weekly data refresh/retrain/publish workflow after the core backtest is accepted.
 
 ## Data attribution
