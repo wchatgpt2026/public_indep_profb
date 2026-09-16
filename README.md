@@ -13,7 +13,7 @@ The design is intentionally market-independent: sportsbook lines and odds are bl
 - Expanding-window out-of-fold forecasts for distribution calibration.
 - A discrete **joint score distribution** based on ex-ante analog games plus recency weighting and maximum-entropy tilting to the point model's target home/away means.
 - Fair moneyline, spread and total pricing with push handling and fair decimal/American odds.
-- Season-by-season rolling-origin backtesting with calibration and naive historical baselines.
+- Season-by-season rolling-origin backtesting with calibration, naive historical baselines, and evaluation-only nflverse market benchmarks.
 - CLI, serialization, holdout evaluation, unit tests and GitHub Actions CI.
 
 See [`docs/MODEL_CARD.md`](docs/MODEL_CARD.md) for assumptions and limitations.
@@ -56,7 +56,9 @@ nflprob backtest \
   --predictions-output artifacts/walk_forward_predictions.csv
 ```
 
-The report includes aggregate and season-level margin/total MAE and RMSE, home-moneyline Brier score, binary log loss, expected calibration error, exact-score negative log likelihood, and comparison against an expanding-history constant baseline. The predictions CSV is suitable for deeper calibration plots and error analysis.
+The report includes aggregate and season-level margin/total MAE and RMSE, home-moneyline Brier score, binary log loss, expected calibration error, exact-score negative log likelihood, and comparison against an expanding-history constant baseline. When the nflverse schedule supplies market fields, the same report also compares the independent model with the posted spread, total and **no-vig** moneyline implied probability on the exact same games. Market fields are retained solely after prediction for evaluation and remain blocked from model training.
+
+The predictions CSV is suitable for deeper calibration plots, residual analysis and line-by-line comparison.
 
 Price a scheduled game already present in the prepared dataset:
 
