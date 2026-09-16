@@ -8,7 +8,11 @@ import pandas as pd
 
 from .backtest import walk_forward_backtest
 from .data import build_nflverse_dataset
-from .development import DEVELOPMENT_MAX_SEASON, development_feature_compare
+from .development import (
+    DEVELOPMENT_MAX_SEASON,
+    development_feature_compare,
+    development_group_ablation,
+)
 from .evaluation import evaluate_holdout
 from .model import NFLPredictor
 
@@ -76,7 +80,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_dev = sub.add_parser(
         "dev-compare",
-        help="compare legacy vs pace/scoring features on the reserved pre-2022 window",
+        help="compare legacy vs all pace/scoring features on the reserved pre-2022 window",
     )
     p_dev.add_argument("--data", required=True)
     p_dev.add_argument("--start-season", type=int, default=2019)
@@ -84,6 +88,18 @@ def build_parser() -> argparse.ArgumentParser:
     p_dev.add_argument("--min-train-games", type=int, default=500)
     p_dev.add_argument("--score-max", type=int, default=80)
     p_dev.add_argument("--predictions-output")
+
+    p_ablate = sub.add_parser(
+        "dev-ablate",
+        help="select pace/scoring feature groups on 2019-2020 and validate the winner on 2021",
+    )
+    p_ablate.add_argument("--data", required=True)
+    p_ablate.add_argument("--selection-start-season", type=int, default=2019)
+    p_ablate.add_argument("--selection-end-season", type=int, default=2020)
+    p_ablate.add_argument("--validation-season", type=int, default=2021)
+    p_ablate.add_argument("--min-train-games", type=int, default=500)
+    p_ablate.add_argument("--score-max", type=int, default=80)
+    p_ablate.add_argument("--predictions-output")
     return parser
 
 
@@ -152,6 +168,21 @@ def main(argv: list[str] | None = None) -> int:
             frame,
             start_season=args.start_season,
             end_season=args.end_season,
+            min_train_games=args.min_train_games,
+            score_max=args.score_max,
+        )
+        if args.predictions_output:
+            _write_frame(predictions, args.predictions_output)
+            report["predictions_output"] = args.predictions_output
+        print(json.dumps(report, indent=2))
+        return 0
+    if args.command == "dev-ablate":
+        frame = _read_frame(args.data)
+        report, predictions = development_group_ablation(
+            frame,
+            selection_start_season=args.selection_start_season,
+            selection_end_season=args.selection_end_season,
+            validation_season=args.validation_season,
             min_train_games=args.min_train_games,
             score_max=args.score_max,
         )

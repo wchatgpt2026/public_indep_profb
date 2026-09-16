@@ -15,7 +15,7 @@ The design is intentionally market-independent: sportsbook lines and odds are bl
 - A discrete **joint score distribution** based on ex-ante analog games plus recency weighting and maximum-entropy tilting to the point model's target home/away means.
 - Fair moneyline, spread and total pricing with push handling and fair decimal/American odds.
 - Season-by-season rolling-origin backtesting with calibration, naive historical baselines, and evaluation-only nflverse market benchmarks.
-- A guarded `dev-compare` workflow that strips market fields, compares the accepted feature set with experimental features only on 2019-2021, and refuses to enter the reserved 2022+ confirmation era.
+- Guarded development workflows that strip market fields and keep 2022+ out of feature selection.
 - CLI, serialization, holdout evaluation, unit tests and GitHub Actions CI.
 
 See [`docs/MODEL_CARD.md`](docs/MODEL_CARD.md) for assumptions and limitations.
@@ -44,7 +44,7 @@ The prepared dataset can contain experimental columns without changing normal mo
 
 ### Research candidate selection
 
-Use the reserved pre-2022 development window to compare the accepted feature set against the experimental pace/scoring block:
+Use the reserved pre-2022 development window to compare the accepted feature set against the full experimental pace/scoring block:
 
 ```bash
 nflprob dev-compare \
@@ -54,7 +54,18 @@ nflprob dev-compare \
   --predictions-output artifacts/dev_candidate_predictions.csv
 ```
 
-`dev-compare` removes sportsbook columns before fitting or scoring either model and hard-fails if `--end-season` is later than 2021. Positive values in `candidate_vs_baseline_improvement_pct` mean the candidate reduced error versus the accepted feature set. Do not use the 2022+ market benchmark to iterate on candidate design.
+For a narrower selection pass, split the development era again. `dev-ablate` evaluates all seven non-empty combinations of three interpretable feature groups on 2019-2020 only, chooses the lowest balanced normalized loss across margin MAE, total MAE, home-win Brier score and exact-score NLL, and then evaluates that winner once on 2021:
+
+```bash
+nflprob dev-ablate \
+  --data data/games.parquet \
+  --selection-start-season 2019 \
+  --selection-end-season 2020 \
+  --validation-season 2021 \
+  --predictions-output artifacts/dev_ablation_winner_2021.csv
+```
+
+The three groups are **pace/volume** (snaps, drives, plays/drive, within-drive tempo), **play calling** (no-huddle and early-down pass rate), and **scoring efficiency** (red-zone EPA/success and scoring-drive rate), each with opponent-side counterparts. Both development commands remove sportsbook columns before fitting or scoring and refuse to enter the reserved 2022+ confirmation era.
 
 Train the accepted/default artifact:
 
@@ -125,7 +136,7 @@ That guarantees internally consistent prices: a moneyline, -3.5 spread and 47.5 
 
 ## Highest-value next extensions
 
-1. Evaluate the pace/scoring candidate on the locked 2019-2021 development window and promote it only if it improves robustly.
+1. Use nested development-era ablation to keep only robust pace/scoring signal, then confirm the selected configuration once on 2022+.
 2. Timestamped injury/practice participation plus an explicit late-QB-scratch override path.
 3. Offensive-line continuity and skill-position availability features.
 4. Stadium-specific forecast weather captured as-of prediction time.
