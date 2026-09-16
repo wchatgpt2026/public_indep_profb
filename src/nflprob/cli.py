@@ -15,6 +15,7 @@ from .development import (
 )
 from .evaluation import evaluate_holdout
 from .model import NFLPredictor
+from .target_split_experiment import development_target_split_compare
 
 
 def _read_frame(path: str) -> pd.DataFrame:
@@ -100,6 +101,17 @@ def build_parser() -> argparse.ArgumentParser:
     p_ablate.add_argument("--min-train-games", type=int, default=500)
     p_ablate.add_argument("--score-max", type=int, default=80)
     p_ablate.add_argument("--predictions-output")
+
+    p_split = sub.add_parser(
+        "dev-target-split",
+        help="test legacy margin features with selected pace/scoring features for total only",
+    )
+    p_split.add_argument("--data", required=True)
+    p_split.add_argument("--start-season", type=int, default=2019)
+    p_split.add_argument("--end-season", type=int, default=DEVELOPMENT_MAX_SEASON)
+    p_split.add_argument("--min-train-games", type=int, default=500)
+    p_split.add_argument("--score-max", type=int, default=80)
+    p_split.add_argument("--predictions-output")
     return parser
 
 
@@ -183,6 +195,20 @@ def main(argv: list[str] | None = None) -> int:
             selection_start_season=args.selection_start_season,
             selection_end_season=args.selection_end_season,
             validation_season=args.validation_season,
+            min_train_games=args.min_train_games,
+            score_max=args.score_max,
+        )
+        if args.predictions_output:
+            _write_frame(predictions, args.predictions_output)
+            report["predictions_output"] = args.predictions_output
+        print(json.dumps(report, indent=2))
+        return 0
+    if args.command == "dev-target-split":
+        frame = _read_frame(args.data)
+        report, predictions = development_target_split_compare(
+            frame,
+            start_season=args.start_season,
+            end_season=args.end_season,
             min_train_games=args.min_train_games,
             score_max=args.score_max,
         )
