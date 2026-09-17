@@ -142,7 +142,7 @@ def audit_dataset(frame: pd.DataFrame) -> dict[str, object]:
     return {
         "rows": int(rows),
         "completed_games": completed,
-        "columns": int(len(frame.columns)),
+        "columns": len(frame.columns),
         "season_min": int(seasons.min()) if len(seasons) else None,
         "season_max": int(seasons.max()) if len(seasons) else None,
         "accepted_feature_count": len(accepted_features),
