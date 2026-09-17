@@ -14,11 +14,49 @@ from .features import PACE_SCORING_METRICS, numeric_feature_columns
 
 
 MARKET_TOKENS = ("moneyline", "spread_line", "total_line", "odds", "vegas", "market_")
+POSTGAME_CONTEXT_FEATURES = frozenset(
+    {
+        "temperature",
+        "wind_speed",
+        "indoors",
+        "home_qb_epa",
+        "away_qb_epa",
+        "home_qb_cpoe",
+        "away_qb_cpoe",
+        "home_qb_experience",
+        "away_qb_experience",
+        "home_qb_known",
+        "away_qb_known",
+        "qb_epa_diff",
+        "qb_cpoe_diff",
+        "qb_experience_diff",
+    }
+)
 
 
 def is_experimental_feature(column: str) -> bool:
     """Return whether a feature belongs to the unpromoted pace/scoring experiment."""
     return any(column.endswith(metric) for metric in PACE_SCORING_METRICS)
+
+
+def is_postgame_context_feature(column: str) -> bool:
+    """Return whether nflverse supplies the context only from the played-game record.
+
+    Historical schedule QB identifiers are reconstructed from that game's play-by-play, while
+    temperature, wind and roof status describe realized game conditions. They may stay in the
+    prepared dataset for audit/research, but are excluded from the deployable default model.
+    """
+    return column in POSTGAME_CONTEXT_FEATURES
+
+
+def default_feature_columns(frame: pd.DataFrame) -> list[str]:
+    """Select the deployable market-independent, pregame-available default feature set."""
+    auto_columns = numeric_feature_columns(frame, extra_exclude={"season", "week"})
+    return [
+        column
+        for column in auto_columns
+        if not is_experimental_feature(column) and not is_postgame_context_feature(column)
+    ]
 
 
 @dataclass(frozen=True)
@@ -72,8 +110,7 @@ class NFLPredictor:
         if len(train) < 120:
             raise ValueError("at least 120 completed games are required for fitting")
         if feature_columns is None:
-            auto_columns = numeric_feature_columns(train, extra_exclude={"season", "week"})
-            feature_columns = [c for c in auto_columns if not is_experimental_feature(c)]
+            feature_columns = default_feature_columns(train)
         self._assert_independent(feature_columns)
         if not feature_columns:
             raise ValueError("no numeric feature columns were selected")
@@ -102,6 +139,7 @@ class NFLPredictor:
         actual_margin, actual_total = home - away, home + away
         self.training_metrics_ = {
             "games": float(len(train)),
+            "features": float(len(self.feature_columns_)),
             "margin_mae_in_sample": float(mean_absolute_error(actual_margin, pred_margin)),
             "margin_rmse_in_sample": float(mean_squared_error(actual_margin, pred_margin) ** 0.5),
             "total_mae_in_sample": float(mean_absolute_error(actual_total, pred_total)),
