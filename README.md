@@ -15,6 +15,7 @@ The design is intentionally market-independent: sportsbook lines and odds are bl
 - A discrete **joint score distribution** based on ex-ante analog games plus recency weighting and maximum-entropy tilting to the point model's target home/away means.
 - Fair moneyline, spread and total pricing with push handling and fair decimal/American odds.
 - Season-by-season rolling-origin backtesting with calibration, naive historical baselines, and evaluation-only nflverse market benchmarks.
+- Guarded development workflows that use the same deployable feature policy as production and keep 2022+ outside feature selection.
 - A data-audit command that reports QB/weather/market coverage without fitting a model.
 - CLI, serialization, holdout evaluation, unit tests and GitHub Actions CI.
 
@@ -83,11 +84,22 @@ Each test season is predicted by a fresh model trained only on completed games f
 
 ### Research history and current protocol
 
-The earlier 2019-2021 pace/scoring experiments were useful for feature discovery, but they used the former 92-feature baseline that included historical starter-derived QB context and realized weather. Those results should be treated as **research history, not deployable validation**.
+The earlier 2019-2021 pace/scoring experiments used the former 92-feature baseline that included historical starter-derived QB context and realized weather. Those results are retained only as research history.
 
-The earlier 2022+ benchmark is likewise no longer the operational reference because it used those postgame-context features. After this policy correction, a fresh rolling-origin benchmark is required to establish the leakage-safe baseline.
+The current `dev-compare`, `dev-ablate`, and `dev-target-split` commands now derive their baseline from the same deployable pregame-only selector used by `NFLPredictor`. Postgame QB/weather fields therefore remain blocked in both production and development research.
 
-The existing `dev-compare`, `dev-ablate`, and `dev-target-split` commands are intentionally prevented from fitting if their explicit feature lists contain blocked postgame-context fields. They should not be used again until their baseline selection is migrated to the new operational feature policy.
+For nested pace/scoring selection, use 2019-2020 for selection and 2021 for internal validation:
+
+```bash
+nflprob dev-ablate \
+  --data data/games.parquet \
+  --selection-start-season 2019 \
+  --selection-end-season 2020 \
+  --validation-season 2021 \
+  --predictions-output artifacts/dev_ablation_winner_2021.csv
+```
+
+All seven non-empty combinations of the pace/volume, play-calling, and scoring-efficiency blocks are compared against the operational baseline on the selection window. Only the selected winner is evaluated on 2021. Seasons 2022+ remain outside this selection loop and should be used only for later confirmation.
 
 Price a scheduled game already present in the prepared dataset:
 
@@ -136,9 +148,9 @@ That keeps prices internally consistent: moneyline, spread and total are integra
 
 1. Timestamped starter-QB, injury and practice-participation data with an explicit late-scratch override path.
 2. Stadium-specific forecast weather captured as-of prediction time.
-3. Migrate the development-era feature-selection tools to the 78-feature operational baseline.
-4. Offensive-line continuity and skill-position availability features.
-5. Nested walk-forward hyperparameter and score-distribution tuning inside development-era data only.
+3. Offensive-line continuity and skill-position availability features.
+4. Nested walk-forward hyperparameter and score-distribution tuning inside development-era data only.
+5. Distribution diagnostics such as CRPS, interval coverage and sharpness.
 6. Automated weekly data refresh/retrain/publish workflow after the research protocol is accepted.
 
 ## Data attribution

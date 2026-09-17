@@ -14,7 +14,7 @@ from .development import (
 )
 from .evaluation import metrics_from_predictions, score_holdout
 from .features import numeric_feature_columns
-from .model import is_experimental_feature
+from .model import default_feature_columns
 from .target_split import DevelopmentTargetSplitPredictor
 
 
@@ -131,9 +131,10 @@ def development_target_split_compare(
 ) -> tuple[dict[str, object], pd.DataFrame]:
     """Test total-only augmentation on development seasons through 2021.
 
-    Margin retains only the accepted legacy features. Total receives the two feature groups
-    selected in the prior nested development experiment: play calling and scoring efficiency.
-    No sportsbook field is available to either model, and 2022+ remains untouched.
+    Margin retains the deployable pregame-only default features. Total receives the two feature
+    groups selected in the prior nested development experiment: play calling and scoring
+    efficiency. No sportsbook or postgame-context field is available to either model, and 2022+
+    remains untouched.
     """
     if end_season > DEVELOPMENT_MAX_SEASON:
         raise ValueError("dev-target-split is locked to seasons through 2021")
@@ -145,7 +146,7 @@ def development_target_split_compare(
         candidate_games,
         extra_exclude={"season", "week"},
     )
-    baseline_columns = [column for column in all_columns if not is_experimental_feature(column)]
+    baseline_columns = default_feature_columns(candidate_games)
     group_columns = _experimental_columns_by_group(all_columns)
     missing_groups = [group for group in TARGET_SPLIT_GROUPS if not group_columns.get(group)]
     if missing_groups:
@@ -216,7 +217,10 @@ def development_target_split_compare(
             "end_season": int(end_season),
             "reserved_confirmation_starts": DEVELOPMENT_MAX_SEASON + 1,
         },
-        "hypothesis": "legacy margin features + selected play-calling/scoring features for total only",
+        "baseline_policy": "deployable pregame-only defaults",
+        "hypothesis": (
+            "operational margin features + selected play-calling/scoring features for total only"
+        ),
         "total_feature_groups": list(TARGET_SPLIT_GROUPS),
         "feature_counts": {
             "margin": len(baseline_columns),
