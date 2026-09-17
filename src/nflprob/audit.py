@@ -4,7 +4,11 @@ import numpy as np
 import pandas as pd
 
 from .features import numeric_feature_columns
-from .model import is_experimental_feature
+from .model import (
+    POSTGAME_CONTEXT_FEATURES,
+    default_feature_columns,
+    is_experimental_feature,
+)
 
 
 MARKET_COLUMNS = (
@@ -134,18 +138,20 @@ def audit_dataset(frame: pd.DataFrame) -> dict[str, object]:
         if "season" in frame.columns
         else pd.Series(dtype=int)
     )
-    accepted_features = [
-        column
-        for column in numeric_feature_columns(frame, extra_exclude={"season", "week"})
-        if not is_experimental_feature(column)
-    ]
+    selected = default_feature_columns(frame)
     return {
         "rows": int(rows),
         "completed_games": completed,
         "columns": len(frame.columns),
         "season_min": int(seasons.min()) if len(seasons) else None,
         "season_max": int(seasons.max()) if len(seasons) else None,
-        "accepted_feature_count": len(accepted_features),
+        "accepted_feature_count": len(selected),
+        "postgame_context_policy": {
+            "excluded_from_default_model": sorted(POSTGAME_CONTEXT_FEATURES),
+            "present_in_dataset": sorted(
+                column for column in POSTGAME_CONTEXT_FEATURES if column in frame.columns
+            ),
+        },
         "qb": _qb_summary(frame),
         "weather": _weather_summary(frame),
         "experimental_features": _experimental_summary(frame),
