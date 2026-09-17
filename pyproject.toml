@@ -26,6 +26,7 @@ dev = ["pytest>=8.3", "ruff>=0.6"]
 [project.scripts]
 nflprob = "nflprob.cli:main"
 nflprob-confirm-injury-margin = "nflprob.injury_margin_confirmation_cli:main"
+nflprob-dev-weekly-refit = "nflprob.weekly_refit_cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/nflprob"]
