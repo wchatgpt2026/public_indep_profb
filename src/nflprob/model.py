@@ -87,10 +87,23 @@ class NFLPredictor:
 
     @staticmethod
     def _assert_independent(feature_columns: list[str]) -> None:
-        offenders = [c for c in feature_columns if any(t in c.lower() for t in MARKET_TOKENS)]
-        if offenders:
+        market_offenders = [
+            column
+            for column in feature_columns
+            if any(token in column.lower() for token in MARKET_TOKENS)
+        ]
+        if market_offenders:
             raise ValueError(
-                "Sportsbook/market features are blocked in independent mode: " + ", ".join(offenders)
+                "Sportsbook/market features are blocked in independent mode: "
+                + ", ".join(market_offenders)
+            )
+        postgame_offenders = [
+            column for column in feature_columns if is_postgame_context_feature(column)
+        ]
+        if postgame_offenders:
+            raise ValueError(
+                "Postgame-derived QB/weather context is blocked in deployable mode: "
+                + ", ".join(postgame_offenders)
             )
 
     @staticmethod
