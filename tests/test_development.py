@@ -32,7 +32,7 @@ def test_dev_compare_rejects_reserved_confirmation_seasons():
         )
 
 
-def test_dev_compare_strips_market_and_ablates_new_features(monkeypatch):
+def test_dev_compare_strips_market_postgame_context_and_ablates_new_features(monkeypatch):
     games = pd.DataFrame(
         {
             "season": [2018, 2019, 2020, 2021],
@@ -42,6 +42,8 @@ def test_dev_compare_strips_market_and_ablates_new_features(monkeypatch):
             "home_pregame_off_epa_per_play": [0.0, 0.1, 0.2, 0.3],
             "home_pregame_off_plays": [60.0, 61.0, 62.0, 63.0],
             "sum_off_plays": [120.0, 122.0, 124.0, 126.0],
+            "home_qb_epa": [0.1, 0.2, 0.3, 0.4],
+            "temperature": [50.0, 60.0, 70.0, 55.0],
             "spread_line": [1.5, 2.5, -1.0, 3.0],
             "total_line": [44.5, 45.5, 46.5, 47.5],
             "home_moneyline": [-120, -130, 110, -140],
@@ -68,11 +70,18 @@ def test_dev_compare_strips_market_and_ablates_new_features(monkeypatch):
         assert "away_moneyline" not in frame_columns
 
     baseline_features, candidate_features = seen_features
+    assert "elo_diff" in baseline_features
+    assert "home_pregame_off_epa_per_play" in baseline_features
+    assert "home_qb_epa" not in baseline_features
+    assert "temperature" not in baseline_features
+    assert "home_qb_epa" not in candidate_features
+    assert "temperature" not in candidate_features
     assert "home_pregame_off_plays" not in baseline_features
     assert "sum_off_plays" not in baseline_features
     assert "home_pregame_off_plays" in candidate_features
     assert "sum_off_plays" in candidate_features
     assert report["development_window"]["reserved_confirmation_starts"] == 2022
+    assert report["baseline_policy"] == "deployable pregame-only defaults"
     assert report["feature_counts"]["added"] == 2
 
 
@@ -104,6 +113,8 @@ def test_dev_ablate_selects_on_2019_2020_then_validates_2021(monkeypatch):
             "home_score": [24, 27, 20, 31],
             "away_score": [20, 17, 23, 21],
             "elo_diff": [5.0, 10.0, -3.0, 7.0],
+            "home_qb_epa": [0.1, 0.2, 0.3, 0.4],
+            "wind_speed": [5.0, 7.0, 8.0, 4.0],
             "home_pregame_off_plays": [60.0, 61.0, 62.0, 63.0],
             "home_pregame_off_no_huddle_rate": [0.1, 0.2, 0.1, 0.2],
             "home_pregame_off_scoring_drive_rate": [0.3, 0.4, 0.3, 0.4],
@@ -124,6 +135,8 @@ def test_dev_ablate_selects_on_2019_2020_then_validates_2021(monkeypatch):
         del kwargs
         assert "spread_line" not in frame.columns
         assert "home_moneyline" not in frame.columns
+        assert "home_qb_epa" not in feature_columns
+        assert "wind_speed" not in feature_columns
         groups = {
             development.experimental_feature_group(column)
             for column in feature_columns
@@ -164,6 +177,7 @@ def test_dev_ablate_selects_on_2019_2020_then_validates_2021(monkeypatch):
     assert report["winner"]["groups"] == ["scoring_efficiency"]
     assert report["winner"]["balanced_improvement_pct"] > 0.0
     assert report["validation"]["winner_vs_baseline_improvement_pct"]["total_mae"] > 0.0
+    assert report["baseline_policy"] == "deployable pregame-only defaults"
 
     selection_calls = [call for call in calls if call[0:2] == (2019, 2020)]
     validation_calls = [call for call in calls if call[0:2] == (2021, 2021)]
