@@ -4,7 +4,6 @@ import numpy as np
 import pandas as pd
 
 from .development import (
-    COMPARISON_METRICS,
     DEVELOPMENT_MAX_SEASON,
     SELECTION_METRICS,
     _comparison_improvements,
