@@ -26,19 +26,32 @@ The deployable default also blocks 14 historical context fields that are not val
 
 These fields may remain present in prepared datasets for audit or future research but are excluded automatically and rejected if manually passed to `NFLPredictor.fit`.
 
+## Current operational baseline
+
+The corrected default is 78 features on the current 2016-2026 dataset. A rolling-origin run over 2022-2026 contains 1,155 completed test games; the 2026 contribution is only 16 games and should be treated as a small partial-season sample.
+
+As of 2026-09-17, the corrected operational benchmark is:
+
+- margin MAE 9.9408 and RMSE 12.8489
+- total MAE 10.5931 and RMSE 13.5173
+- home-win Brier 0.22057 and log loss 0.63159
+- exact-score NLL 7.93610
+- versus the expanding-history naive baseline: +7.35% margin MAE, +7.47% margin RMSE, +2.67% total MAE, +1.82% total RMSE, and +10.72% home-win Brier improvement
+- versus the evaluation-only nflverse market benchmark on matched games: -3.98% margin MAE, -3.75% total MAE, and -5.03% home-win Brier improvement, where negative means the market has lower error
+
+This benchmark supersedes the earlier 92-feature results as the operational reference.
+
 ## Research-selection status
 
 The earlier 2019-2021 pace/scoring experiments used the former 92-feature baseline that included postgame-derived QB/weather context. They are useful as research history but are not valid deployable validation results.
 
-The earlier 2022+ rolling-origin market benchmark is also no longer the operational reference for the same reason. A fresh benchmark using the corrected default feature policy is required.
+The development commands now use the same deployable pregame-only feature selector as the production model. `dev-compare`, `dev-ablate`, and `dev-target-split` therefore exclude the same postgame-context fields while continuing to strip market fields and refuse to enter the 2022+ confirmation era.
 
-The corrected default is 78 features on the current 2016-2026 dataset. Existing research commands that explicitly construct the former baseline are intentionally blocked by the postgame-context guard until they are migrated to the new operational policy.
+For active feature research, use 2019-2020 for feature-group selection and 2021 for internal validation. The already-inspected 2022+ benchmark is a secondary confirmation/reference surface rather than the primary tuning target.
 
 ## Intended evaluation
 
 Use rolling-origin season/week holdouts. Primary metrics should include margin/total MAE and RMSE, moneyline Brier/log loss, exact-score negative log likelihood, calibration plots, interval coverage, and ATS/total calibration by line bucket. Compare against simple Elo and market benchmarks, but never feed the benchmark market price back into the independent model.
-
-For active feature research, first migrate the development workflow to the corrected operational baseline and select changes only inside the development era. Later seasons should be used for confirmation rather than repeated tuning.
 
 ## Limitations
 
