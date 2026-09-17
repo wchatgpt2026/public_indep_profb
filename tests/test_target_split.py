@@ -46,13 +46,15 @@ def test_target_split_rejects_confirmation_seasons():
         )
 
 
-def test_target_split_strips_market_and_augments_only_total(monkeypatch):
+def test_target_split_strips_market_postgame_context_and_augments_only_total(monkeypatch):
     games = pd.DataFrame(
         {
             "season": [2018, 2019],
             "home_score": [24, 27],
             "away_score": [20, 17],
             "elo_diff": [5.0, 10.0],
+            "home_qb_epa": [0.1, 0.2],
+            "indoors": [0.0, 1.0],
             "home_pregame_off_no_huddle_rate": [0.05, 0.10],
             "home_pregame_off_red_zone_epa": [0.01, 0.03],
             "spread_line": [1.5, 2.5],
@@ -66,9 +68,7 @@ def test_target_split_strips_market_and_augments_only_total(monkeypatch):
         seen["baseline_frame"] = set(frame.columns)
         seen["baseline_features"] = list(feature_columns)
         row = {**_metrics(1.0), "season": 2019.0, "train_games": 1000.0}
-        predictions = pd.DataFrame(
-            {"game_id": ["g1"], "predicted_margin": [2.0]}
-        )
+        predictions = pd.DataFrame({"game_id": ["g1"], "predicted_margin": [2.0]})
         return {"summary": _metrics(1.0), "by_season": [row], "skipped": []}, predictions
 
     def fake_split(
@@ -83,9 +83,7 @@ def test_target_split_strips_market_and_augments_only_total(monkeypatch):
         seen["margin_features"] = list(margin_feature_columns)
         seen["total_features"] = list(total_feature_columns)
         row = {**_metrics(0.9), "season": 2019.0, "train_games": 1000.0}
-        predictions = pd.DataFrame(
-            {"game_id": ["g1"], "predicted_margin": [2.0]}
-        )
+        predictions = pd.DataFrame({"game_id": ["g1"], "predicted_margin": [2.0]})
         return {"summary": _metrics(0.9), "by_season": [row], "skipped": []}, predictions
 
     monkeypatch.setattr(target_split_experiment, "_run_feature_backtest", fake_baseline)
@@ -99,8 +97,15 @@ def test_target_split_strips_market_and_augments_only_total(monkeypatch):
 
     assert "spread_line" not in seen["baseline_frame"]
     assert "home_moneyline" not in seen["split_frame"]
+    assert "home_qb_epa" not in seen["baseline_features"]
+    assert "indoors" not in seen["baseline_features"]
+    assert "home_qb_epa" not in seen["margin_features"]
+    assert "indoors" not in seen["margin_features"]
+    assert "home_qb_epa" not in seen["total_features"]
+    assert "indoors" not in seen["total_features"]
     assert "home_pregame_off_no_huddle_rate" not in seen["margin_features"]
     assert "home_pregame_off_red_zone_epa" not in seen["margin_features"]
     assert "home_pregame_off_no_huddle_rate" in seen["total_features"]
     assert "home_pregame_off_red_zone_epa" in seen["total_features"]
+    assert report["baseline_policy"] == "deployable pregame-only defaults"
     assert report["margin_invariance"]["max_abs_margin_difference"] == 0.0
