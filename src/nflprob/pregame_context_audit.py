@@ -124,7 +124,7 @@ def _by_season_rates(
         for column in value_columns:
             if column in subset.columns:
                 row[f"{column}_rate"] = float(
-                    subset[column].fillna(False).astype(bool).mean()
+                    subset[column].astype("boolean").fillna(False).mean()
                 )
         output.append(row)
     return output
@@ -185,8 +185,10 @@ def _injury_audit(
         on=keys,
         how="left",
     )
-    joined["any_report"] = joined["any_report"].fillna(False)
-    joined["eligible_report"] = joined["eligible_report"].fillna(False)
+    joined["any_report"] = joined["any_report"].astype("boolean").fillna(False).astype(bool)
+    joined["eligible_report"] = (
+        joined["eligible_report"].astype("boolean").fillna(False).astype(bool)
+    )
 
     player_key = "gsis_id" if "gsis_id" in frame.columns else None
     revision_groups = 0
@@ -278,7 +280,9 @@ def _pre2025_depth_audit(
         week_key=pd.to_numeric(matured["week"], errors="coerce").astype("Int64"),
         team_key=matured["team"].astype("string"),
     ).merge(available, on=["season_key", "week_key", "team_key"], how="left")
-    joined["qb1_weekly_available"] = joined["qb1_weekly_available"].fillna(False)
+    joined["qb1_weekly_available"] = (
+        joined["qb1_weekly_available"].astype("boolean").fillna(False).astype(bool)
+    )
     summary.update(
         {
             "qb1_weekly_team_game_coverage": (
