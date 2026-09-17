@@ -16,6 +16,7 @@ from .development import (
     development_group_ablation,
 )
 from .evaluation import evaluate_holdout
+from .injury_experiment import development_injury_group_ablation_live
 from .model import NFLPredictor
 from .pregame_context_audit import audit_pregame_context
 from .target_split_experiment import development_target_split_compare
@@ -122,6 +123,19 @@ def build_parser() -> argparse.ArgumentParser:
     p_ablate.add_argument("--min-train-games", type=int, default=500)
     p_ablate.add_argument("--score-max", type=int, default=80)
     p_ablate.add_argument("--predictions-output")
+
+    p_injury = sub.add_parser(
+        "dev-injury-ablate",
+        help="select strict T-24 injury/practice feature groups before 2022",
+    )
+    p_injury.add_argument("--data", required=True)
+    p_injury.add_argument("--selection-start-season", type=int, default=2019)
+    p_injury.add_argument("--selection-end-season", type=int, default=2020)
+    p_injury.add_argument("--validation-season", type=int, default=2021)
+    p_injury.add_argument("--cutoff-hours", type=float, default=24.0)
+    p_injury.add_argument("--min-train-games", type=int, default=500)
+    p_injury.add_argument("--score-max", type=int, default=80)
+    p_injury.add_argument("--predictions-output")
 
     p_split = sub.add_parser(
         "dev-target-split",
@@ -240,6 +254,22 @@ def main(argv: list[str] | None = None) -> int:
             selection_start_season=args.selection_start_season,
             selection_end_season=args.selection_end_season,
             validation_season=args.validation_season,
+            min_train_games=args.min_train_games,
+            score_max=args.score_max,
+        )
+        if args.predictions_output:
+            _write_frame(predictions, args.predictions_output)
+            report["predictions_output"] = args.predictions_output
+        print(json.dumps(report, indent=2))
+        return 0
+    if args.command == "dev-injury-ablate":
+        frame = _read_frame(args.data)
+        report, predictions = development_injury_group_ablation_live(
+            frame,
+            selection_start_season=args.selection_start_season,
+            selection_end_season=args.selection_end_season,
+            validation_season=args.validation_season,
+            cutoff_hours=args.cutoff_hours,
             min_train_games=args.min_train_games,
             score_max=args.score_max,
         )
