@@ -83,6 +83,14 @@ nflprob-confirm-injury-margin \
 
 The command downloads schedules and injury reports through 2024 at runtime. Production defaults remain unchanged unless this fixed candidate clears the confirmation rule.
 
+## Confirmation result
+
+The fixed margin-only candidate is rejected under the precommitted rule. On aggregate 2022-2024 it improved margin MAE by about 0.80%, home-win Brier by about 0.95%, log loss by about 0.72%, and ECE by about 12.4%. Margin MAE, Brier, log loss, and ECE improved in each of the three confirmation seasons.
+
+However, aggregate exact-score NLL worsened by about 0.036%, so the distribution-quality requirement failed. The reported total-point difference was only about `2.2e-6`, which is operationally negligible but slightly above the precommitted `1e-6` invariance tolerance. The experiment is therefore recorded as rejected rather than changing thresholds after observing the result.
+
+The retained research finding is narrower: strict T-24 injury context contains repeatable signal for margin and home-win probability, but the tested distribution integration did not validate and the source cannot support current deployment after 2024.
+
 ## Source limitation
 
-The nflverse injury feed currently ends after the 2024 season. Even if the historical confirmation succeeds, operational deployment for 2025+ requires a current injury/practice source with equivalent timestamp semantics. The 2025+ timestamped depth-chart feed is useful for current QB1 context, but it is not a substitute for the missing injury/practice feed.
+The nflverse injury feed currently ends after the 2024 season. Operational deployment for 2025+ requires a current injury/practice source with equivalent timestamp semantics. The 2025+ timestamped depth-chart feed is useful for current QB1 context, but it is not a substitute for the missing injury/practice feed.
