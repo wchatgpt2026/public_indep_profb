@@ -7,7 +7,7 @@ import pandas as pd
 
 from .evaluation import metrics_from_predictions, score_holdout
 from .features import numeric_feature_columns
-from .model import NFLPredictor, is_experimental_feature
+from .model import NFLPredictor, default_feature_columns, is_experimental_feature
 
 
 DEVELOPMENT_MAX_SEASON = 2021
@@ -215,7 +215,7 @@ def development_feature_compare(
     score_max: int = 80,
     random_state: int = 7,
 ) -> tuple[dict[str, object], pd.DataFrame]:
-    """Compare legacy vs all pace/scoring features on the reserved development era only."""
+    """Compare operational defaults vs all pace/scoring features on development seasons."""
     if end_season > DEVELOPMENT_MAX_SEASON:
         raise ValueError(
             "dev-compare is locked to seasons through 2021; use the regular backtest only "
@@ -235,8 +235,8 @@ def development_feature_compare(
             "no pace/scoring feature columns were found; rebuild the dataset with the current "
             "`nflprob build-data` command before running dev-compare"
         )
-    baseline_columns = [column for column in all_columns if not is_experimental_feature(column)]
-    candidate_columns = all_columns
+    baseline_columns = default_feature_columns(candidate_games)
+    candidate_columns = baseline_columns + added_features
 
     baseline_report, _ = _run_feature_backtest(
         candidate_games,
@@ -266,6 +266,7 @@ def development_feature_compare(
             "end_season": int(end_season),
             "reserved_confirmation_starts": DEVELOPMENT_MAX_SEASON + 1,
         },
+        "baseline_policy": "deployable pregame-only defaults",
         "feature_counts": {
             "baseline": len(baseline_columns),
             "candidate": len(candidate_columns),
@@ -296,11 +297,11 @@ def development_group_ablation(
     score_max: int = 80,
     random_state: int = 7,
 ) -> tuple[dict[str, object], pd.DataFrame]:
-    """Select experimental feature groups on early development seasons, validate on 2021.
+    """Select experimental groups against the operational baseline, validate on 2021.
 
     All sportsbook fields are removed before fitting or scoring. The feature-group winner is
-    chosen using 2019-2020 only, then evaluated once against the legacy feature set on 2021.
-    Seasons 2022+ remain outside this research-selection loop.
+    chosen using 2019-2020 only, then evaluated once against the deployable pregame-only default
+    feature set on 2021. Seasons 2022+ remain outside this research-selection loop.
     """
     if validation_season > DEVELOPMENT_MAX_SEASON:
         raise ValueError("dev-ablate validation is locked to seasons through 2021")
@@ -314,7 +315,7 @@ def development_group_ablation(
         candidate_games,
         extra_exclude={"season", "week"},
     )
-    baseline_columns = [column for column in all_columns if not is_experimental_feature(column)]
+    baseline_columns = default_feature_columns(candidate_games)
     group_columns = _experimental_columns_by_group(all_columns)
     missing_groups = [name for name, columns in group_columns.items() if not columns]
     if missing_groups:
@@ -417,6 +418,7 @@ def development_group_ablation(
         },
         "validation_season": int(validation_season),
         "reserved_confirmation_starts": DEVELOPMENT_MAX_SEASON + 1,
+        "baseline_policy": "deployable pregame-only defaults",
         "selection_metrics": list(SELECTION_METRICS),
         "feature_groups": {
             name: {
