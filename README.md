@@ -1,22 +1,35 @@
 # public_indep_profb
 
-Independent, research-grade NFL forecasting package that produces a **full joint final-score distribution** and can therefore price any moneyline, spread, total, or exact score from one internally coherent probability surface.
+Independent, research-grade NFL forecasting package that produces a **full joint final-score distribution** and can therefore price moneylines, spreads, totals, and exact scores from one internally coherent probability surface.
 
 The design is intentionally market-independent: sportsbook lines and odds are blocked from the predictive feature matrix. Public nflverse play-by-play and schedule data provide the default inputs.
 
 ## What is implemented
 
-- Leakage-safe pregame features from EPA/play, success rate, dropback/rush EPA, explosives, turnovers, sacks, CPOE, points, rest, weather/roof and an internal Elo rating.
-- An experimental, non-default pace/scoring feature block with prior-game snaps, drives, plays/drive, within-drive seconds/snap, no-huddle rate, early-down pass rate, red-zone EPA/success and scoring-drive rate, plus opponent-side counterparts.
+- Leakage-safe prior-game team features from EPA/play, success rate, dropback/rush EPA, explosives, turnovers, sacks, CPOE, points, and rest.
+- Neutral-site status and an internally maintained Elo rating.
+- An experimental, non-default pace/scoring block with prior-game snaps, drives, plays/drive, within-drive seconds/snap, no-huddle rate, early-down pass rate, red-zone EPA/success and scoring-drive rate, plus opponent-side counterparts.
 - Exponentially weighted team form with current-game data shifted out of every pregame row.
-- A quarterback state layer using prior-game QB EPA/CPOE, experience shrinkage, and strictly pre-kickoff lookup when starter IDs are available.
 - Separate **margin** and **total** ensembles: ridge + histogram gradient boosting + Extra Trees, with chronological validation used to learn non-negative blend weights.
 - Expanding-window out-of-fold forecasts for distribution calibration.
 - A discrete **joint score distribution** based on ex-ante analog games plus recency weighting and maximum-entropy tilting to the point model's target home/away means.
 - Fair moneyline, spread and total pricing with push handling and fair decimal/American odds.
 - Season-by-season rolling-origin backtesting with calibration, naive historical baselines, and evaluation-only nflverse market benchmarks.
-- Guarded development workflows that strip market fields and keep 2022+ out of feature selection.
+- A data-audit command that reports QB/weather/market coverage without fitting a model.
 - CLI, serialization, holdout evaluation, unit tests and GitHub Actions CI.
+
+## Operational pregame policy
+
+The prepared parquet may contain historical nflverse fields that are useful for analysis but are **not valid as-of-prediction inputs** for a deployable backtest.
+
+The default model therefore excludes these 14 fields:
+
+- historical starter-derived QB context: `home_qb_epa`, `away_qb_epa`, `home_qb_cpoe`, `away_qb_cpoe`, `home_qb_experience`, `away_qb_experience`, `home_qb_known`, `away_qb_known`, `qb_epa_diff`, `qb_cpoe_diff`, `qb_experience_diff`
+- realized game-condition context: `temperature`, `wind_speed`, `indoors`
+
+The historical nflverse schedule QB identifiers are reconstructed from the quarterback who actually played in the game, and the weather/roof fields describe realized game conditions. Those columns can remain in the dataset for audit and future research, but `NFLPredictor` excludes them automatically and rejects them if they are manually passed as predictive features.
+
+On the current 2016-2026 dataset this changes the accepted default feature count from 92 to **78**. A future QB layer should use a timestamped pregame starter/injury source, and weather should use a forecast captured as of prediction time.
 
 See [`docs/MODEL_CARD.md`](docs/MODEL_CARD.md) for assumptions and limitations.
 
@@ -31,7 +44,7 @@ pip install -e '.[data,dev]'
 
 ## End-to-end run
 
-Build a dataset. A practical starting window is 2016 through the current season; older seasons can be added if desired.
+Build a dataset:
 
 ```bash
 nflprob build-data \
@@ -40,34 +53,15 @@ nflprob build-data \
   --output data/games.parquet
 ```
 
-The prepared dataset can contain experimental columns without changing normal model behavior. `nflprob train` and `nflprob backtest` continue to use the accepted legacy feature set unless an experiment is explicitly promoted in code.
+The parquet can retain experimental and audit-only columns without changing normal model behavior.
 
-### Research candidate selection
-
-Use the reserved pre-2022 development window to compare the accepted feature set against the full experimental pace/scoring block:
+Audit the actual input coverage:
 
 ```bash
-nflprob dev-compare \
-  --data data/games.parquet \
-  --start-season 2019 \
-  --end-season 2021 \
-  --predictions-output artifacts/dev_candidate_predictions.csv
+nflprob audit-data --data data/games.parquet
 ```
 
-For a narrower selection pass, split the development era again. `dev-ablate` evaluates all seven non-empty combinations of three interpretable feature groups on 2019-2020 only, chooses the lowest balanced normalized loss across margin MAE, total MAE, home-win Brier score and exact-score NLL, and then evaluates that winner once on 2021:
-
-```bash
-nflprob dev-ablate \
-  --data data/games.parquet \
-  --selection-start-season 2019 \
-  --selection-end-season 2020 \
-  --validation-season 2021 \
-  --predictions-output artifacts/dev_ablation_winner_2021.csv
-```
-
-The three groups are **pace/volume** (snaps, drives, plays/drive, within-drive tempo), **play calling** (no-huddle and early-down pass rate), and **scoring efficiency** (red-zone EPA/success and scoring-drive rate), each with opponent-side counterparts. Both development commands remove sportsbook columns before fitting or scoring and refuse to enter the reserved 2022+ confirmation era.
-
-Train the accepted/default artifact:
+Train the deployable/default artifact:
 
 ```bash
 nflprob train \
@@ -75,9 +69,7 @@ nflprob train \
   --model artifacts/nfl_model.joblib
 ```
 
-### Confirmation benchmark
-
-After a candidate has been selected on the development window, run the later rolling-origin confirmation benchmark once. Each test season is predicted by a fresh model trained only on completed games from earlier seasons:
+Run a rolling-origin benchmark:
 
 ```bash
 nflprob backtest \
@@ -87,9 +79,15 @@ nflprob backtest \
   --predictions-output artifacts/walk_forward_predictions.csv
 ```
 
-The report includes aggregate and season-level margin/total MAE and RMSE, home-moneyline Brier score, binary log loss, expected calibration error, exact-score negative log likelihood, and comparison against an expanding-history constant baseline. When the nflverse schedule supplies market fields, the same report also compares the independent model with the posted spread, total and **no-vig** moneyline implied probability on the exact same games. Market fields are retained solely after prediction for evaluation and remain blocked from model training.
+Each test season is predicted by a fresh model trained only on completed games from earlier seasons. The report includes aggregate and season-level margin/total MAE and RMSE, home-moneyline Brier score, binary log loss, expected calibration error, exact-score negative log likelihood, and comparison against an expanding-history constant baseline. When nflverse supplies market fields, the same report also compares the independent model with spread, total and no-vig moneyline implied probability on the exact same games. Market fields are retained solely after prediction for evaluation and remain blocked from training.
 
-The predictions CSV is suitable for deeper calibration plots, residual analysis and line-by-line comparison.
+### Research history and current protocol
+
+The earlier 2019-2021 pace/scoring experiments were useful for feature discovery, but they used the former 92-feature baseline that included historical starter-derived QB context and realized weather. Those results should be treated as **research history, not deployable validation**.
+
+The earlier 2022+ benchmark is likewise no longer the operational reference because it used those postgame-context features. After this policy correction, a fresh rolling-origin benchmark is required to establish the leakage-safe baseline.
+
+The existing `dev-compare`, `dev-ablate`, and `dev-target-split` commands are intentionally prevented from fitting if their explicit feature lists contain blocked postgame-context fields. They should not be used again until their baseline selection is migrated to the new operational feature policy.
 
 Price a scheduled game already present in the prepared dataset:
 
@@ -132,14 +130,14 @@ print(dist.exact_score(27, 20))
 
 A full score model needs more than a normal approximation to margin. NFL final scores have visible scoring-number structure, home/away residual dependence and heavier tails than independent Poisson models usually imply. This project therefore uses the ML ensemble for the two economically important first moments (margin and total), then calibrates a football-shaped joint discrete distribution from out-of-fold analog games and tilts that distribution to the current means.
 
-That guarantees internally consistent prices: a moneyline, -3.5 spread and 47.5 total are all integrations of the **same** joint score matrix rather than separate classifiers that can contradict one another.
+That keeps prices internally consistent: moneyline, spread and total are integrations of the **same** joint score matrix rather than separate classifiers that can contradict one another.
 
 ## Highest-value next extensions
 
-1. Use nested development-era ablation to keep only robust pace/scoring signal, then confirm the selected configuration once on 2022+.
-2. Timestamped injury/practice participation plus an explicit late-QB-scratch override path.
-3. Offensive-line continuity and skill-position availability features.
-4. Stadium-specific forecast weather captured as-of prediction time.
+1. Timestamped starter-QB, injury and practice-participation data with an explicit late-scratch override path.
+2. Stadium-specific forecast weather captured as-of prediction time.
+3. Migrate the development-era feature-selection tools to the 78-feature operational baseline.
+4. Offensive-line continuity and skill-position availability features.
 5. Nested walk-forward hyperparameter and score-distribution tuning inside development-era data only.
 6. Automated weekly data refresh/retrain/publish workflow after the research protocol is accepted.
 

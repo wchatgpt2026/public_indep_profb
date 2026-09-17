@@ -34,6 +34,18 @@ def test_audit_dataset_reports_qb_weather_and_market_coverage():
     assert report["completed_games"] == 3
     assert report["season_min"] == 2020
     assert report["season_max"] == 2021
+    assert report["accepted_feature_count"] == 1
+    assert report["postgame_context_policy"]["present_in_dataset"] == [
+        "away_qb_epa",
+        "away_qb_experience",
+        "away_qb_known",
+        "home_qb_epa",
+        "home_qb_experience",
+        "home_qb_known",
+        "indoors",
+        "temperature",
+        "wind_speed",
+    ]
     assert report["qb"]["home_known_rate"] == 0.75
     assert report["qb"]["away_known_rate"] == 0.5
     assert report["qb"]["both_known_rate"] == 0.5
