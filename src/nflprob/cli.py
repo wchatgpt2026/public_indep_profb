@@ -8,6 +8,7 @@ import pandas as pd
 
 from .audit import audit_dataset
 from .backtest import walk_forward_backtest
+from .confirmation import confirmation_feature_compare
 from .data import build_nflverse_dataset
 from .development import (
     DEVELOPMENT_MAX_SEASON,
@@ -119,6 +120,17 @@ def build_parser() -> argparse.ArgumentParser:
     p_split.add_argument("--min-train-games", type=int, default=500)
     p_split.add_argument("--score-max", type=int, default=80)
     p_split.add_argument("--predictions-output")
+
+    p_confirm = sub.add_parser(
+        "confirm-pace-scoring",
+        help="one-shot 2022+ confirmation of the fixed play-calling/scoring candidate",
+    )
+    p_confirm.add_argument("--data", required=True)
+    p_confirm.add_argument("--start-season", type=int, default=2022)
+    p_confirm.add_argument("--end-season", type=int)
+    p_confirm.add_argument("--min-train-games", type=int, default=500)
+    p_confirm.add_argument("--score-max", type=int, default=80)
+    p_confirm.add_argument("--predictions-output")
     return parser
 
 
@@ -217,6 +229,20 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "dev-target-split":
         frame = _read_frame(args.data)
         report, predictions = development_target_split_compare(
+            frame,
+            start_season=args.start_season,
+            end_season=args.end_season,
+            min_train_games=args.min_train_games,
+            score_max=args.score_max,
+        )
+        if args.predictions_output:
+            _write_frame(predictions, args.predictions_output)
+            report["predictions_output"] = args.predictions_output
+        print(json.dumps(report, indent=2))
+        return 0
+    if args.command == "confirm-pace-scoring":
+        frame = _read_frame(args.data)
+        report, predictions = confirmation_feature_compare(
             frame,
             start_season=args.start_season,
             end_season=args.end_season,
