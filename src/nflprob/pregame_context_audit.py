@@ -75,12 +75,6 @@ def load_pregame_context_sources(
     return schedules, injuries, depth_charts
 
 
-def _rate(numerator: int | float, denominator: int | float) -> float:
-    if denominator <= 0:
-        return float("nan")
-    return float(numerator / denominator)
-
-
 def _parse_kickoff_utc(schedules: pd.DataFrame) -> pd.Series:
     if not {"gameday", "gametime"}.issubset(schedules.columns):
         return pd.Series(pd.NaT, index=schedules.index, dtype="datetime64[ns, UTC]")
@@ -135,7 +129,7 @@ def _by_season_rates(
     seasons = pd.to_numeric(frame[season_column], errors="coerce")
     for season in sorted(int(value) for value in seasons.dropna().unique()):
         subset = frame.loc[seasons == season]
-        row: dict[str, float | int] = {"season": season, "team_games": int(len(subset))}
+        row: dict[str, float | int] = {"season": season, "team_games": len(subset)}
         for column in value_columns:
             if column in subset.columns:
                 row[f"{column}_rate"] = float(subset[column].fillna(False).astype(bool).mean())
@@ -153,7 +147,7 @@ def _injury_audit(
     summary: dict[str, object] = {
         "upstream_last_available_season": INJURY_LAST_AVAILABLE_SEASON,
         "requested_seasons_without_upstream_data": unavailable,
-        "rows": int(len(injuries)),
+        "rows": len(injuries),
         "columns": sorted(str(column) for column in injuries.columns),
     }
     if injuries.empty:
@@ -220,9 +214,9 @@ def _injury_audit(
             ),
             "teams_present": int(frame["team"].nunique(dropna=True)),
             "players_present": int(frame[player_key].nunique(dropna=True)) if player_key else None,
-            "qb_rows": int(len(qb_rows)),
+            "qb_rows": len(qb_rows),
             "revision_player_week_groups": revision_groups,
-            "matured_team_games": int(len(matured)),
+            "matured_team_games": len(matured),
             "team_game_any_report_rate": float(joined["any_report"].mean()) if len(joined) else float("nan"),
             "team_game_report_available_at_cutoff_rate": float(joined["eligible_report"].mean()) if len(joined) else float("nan"),
             "by_season": _by_season_rates(
@@ -253,8 +247,8 @@ def _pre2025_depth_audit(depth: pd.DataFrame, team_games: pd.DataFrame) -> dict[
         & pd.to_numeric(team_games["season"], errors="coerce").le(2024)
     ].copy()
     summary: dict[str, object] = {
-        "rows": int(len(historical)),
-        "matured_team_games": int(len(matured)),
+        "rows": len(historical),
+        "matured_team_games": len(matured),
         "timestamped": False,
         "strict_cutoff_enforceable": False,
     }
@@ -316,8 +310,8 @@ def _post2025_depth_audit(depth: pd.DataFrame, team_games: pd.DataFrame) -> dict
         & pd.to_numeric(team_games["season"], errors="coerce").ge(2025)
     ].copy()
     summary: dict[str, object] = {
-        "rows": int(len(recent)),
-        "matured_team_games": int(len(matured)),
+        "rows": len(recent),
+        "matured_team_games": len(matured),
         "timestamped": "dt" in recent.columns,
     }
     if recent.empty or "dt" not in recent.columns:
@@ -373,7 +367,9 @@ def _post2025_depth_audit(depth: pd.DataFrame, team_games: pd.DataFrame) -> dict
     if "gsis_id" not in matched_games.columns:
         matched_games["gsis_id"] = pd.NA
     matched_games["qb1_at_cutoff"] = matched_games["snapshot_utc"].notna()
-    matched_games["qb1_gsis_at_cutoff"] = matched_games["qb1_at_cutoff"] & matched_games["gsis_id"].notna()
+    matched_games["qb1_gsis_at_cutoff"] = (
+        matched_games["qb1_at_cutoff"] & matched_games["gsis_id"].notna()
+    )
     staleness = (
         (matched_games["cutoff_utc"] - matched_games["snapshot_utc"]).dt.total_seconds() / 3600.0
     )
@@ -425,7 +421,9 @@ def audit_pregame_context_frames(
     team_games = _team_games(schedule, cutoff_hours=cutoff_hours, as_of_utc=as_of_utc)
     matured = team_games.loc[team_games["cutoff_matured"]]
 
-    kickoff_parse_rate = float(team_games["kickoff_utc"].notna().mean()) if len(team_games) else float("nan")
+    kickoff_parse_rate = (
+        float(team_games["kickoff_utc"].notna().mean()) if len(team_games) else float("nan")
+    )
     return {
         "requested_window": {
             "start_season": int(start_season),
@@ -437,9 +435,9 @@ def audit_pregame_context_frames(
             "schedule_time_interpretation": "nflverse gameday + gametime interpreted in America/New_York, then converted to UTC",
         },
         "schedule": {
-            "games": int(len(schedule)),
-            "team_games": int(len(team_games)),
-            "matured_team_games": int(len(matured)),
+            "games": len(schedule),
+            "team_games": len(team_games),
+            "matured_team_games": len(matured),
             "kickoff_parse_rate": kickoff_parse_rate,
         },
         "injuries": _injury_audit(injuries, team_games, requested_seasons=requested),
