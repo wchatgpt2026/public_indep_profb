@@ -88,7 +88,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_dev = sub.add_parser(
         "dev-compare",
-        help="compare legacy vs all pace/scoring features on the reserved pre-2022 window",
+        help="compare operational defaults vs all pace/scoring features before 2022",
     )
     p_dev.add_argument("--data", required=True)
     p_dev.add_argument("--start-season", type=int, default=2019)
@@ -99,7 +99,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_ablate = sub.add_parser(
         "dev-ablate",
-        help="select pace/scoring feature groups on 2019-2020 and validate the winner on 2021",
+        help="select pace/scoring groups on 2019-2020 and validate the winner on 2021",
     )
     p_ablate.add_argument("--data", required=True)
     p_ablate.add_argument("--selection-start-season", type=int, default=2019)
@@ -111,7 +111,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_split = sub.add_parser(
         "dev-target-split",
-        help="test legacy margin features with selected pace/scoring features for total only",
+        help="test operational margin features with selected experimental total features",
     )
     p_split.add_argument("--data", required=True)
     p_split.add_argument("--start-season", type=int, default=2019)
