@@ -53,6 +53,36 @@ nflprob dev-injury-ablate \
 
 The command downloads schedules and injury reports for the training/development seasons at runtime; the existing game parquet does not need to be rebuilt.
 
+## Development result
+
+The 2019-2020 selection winner was `game_status + position_concentration` (48 added features), with a balanced normalized improvement of about 0.81% across the four precommitted selection metrics.
+
+On 2021 validation, that same block improved margin MAE/RMSE and home-win Brier/log loss, but worsened total MAE/RMSE, ECE, and exact-score NLL. It is therefore not accepted as a universal feature block.
+
+The fixed follow-up hypothesis is target-specific: add the already-selected `game_status + position_concentration` block to the margin model only, while leaving the total model on the 78-feature production baseline. This is not a new feature search.
+
+## One-shot 2022-2024 confirmation
+
+The injury source ends after 2024, so the fixed target-specific candidate is confirmed once on 2022-2024. The precommitted acceptance rule requires all of the following:
+
+- margin MAE improves;
+- home-win Brier improves;
+- exact-score NLL does not worsen; and
+- total point predictions remain invariant within `1e-6`.
+
+Run:
+
+```bash
+nflprob-confirm-injury-margin \
+  --data data/games.parquet \
+  --start-season 2022 \
+  --end-season 2024 \
+  --cutoff-hours 24 \
+  --predictions-output artifacts/confirmation_injury_margin_2022_2024.csv
+```
+
+The command downloads schedules and injury reports through 2024 at runtime. Production defaults remain unchanged unless this fixed candidate clears the confirmation rule.
+
 ## Source limitation
 
-The nflverse injury feed currently ends after the 2024 season. Any candidate that survives development must therefore be treated as a historical research feature until a current injury/practice source with equivalent timestamp semantics is available for 2025+ deployment.
+The nflverse injury feed currently ends after the 2024 season. Even if the historical confirmation succeeds, operational deployment for 2025+ requires a current injury/practice source with equivalent timestamp semantics. The 2025+ timestamped depth-chart feed is useful for current QB1 context, but it is not a substitute for the missing injury/practice feed.
