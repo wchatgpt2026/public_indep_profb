@@ -17,6 +17,7 @@ from .development import (
 )
 from .evaluation import evaluate_holdout
 from .model import NFLPredictor
+from .pregame_context_audit import audit_pregame_context
 from .target_split_experiment import development_target_split_compare
 
 
@@ -58,6 +59,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="report coverage of quarterback, weather, experimental, and market fields",
     )
     p_audit.add_argument("--data", required=True)
+
+    p_context = sub.add_parser(
+        "audit-pregame-context",
+        help="audit timestamped injury/depth-chart data for strict as-of pregame use",
+    )
+    p_context.add_argument("--start-season", type=int, required=True)
+    p_context.add_argument("--end-season", type=int, required=True)
+    p_context.add_argument("--cutoff-hours", type=float, default=24.0)
+    p_context.add_argument(
+        "--as-of",
+        help="optional ISO8601 audit timestamp; defaults to current UTC time",
+    )
 
     p_train = sub.add_parser("train", help="fit a model artifact")
     p_train.add_argument("--data", required=True)
@@ -145,6 +158,15 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "audit-data":
         frame = _read_frame(args.data)
         print(json.dumps(audit_dataset(frame), indent=2))
+        return 0
+    if args.command == "audit-pregame-context":
+        report = audit_pregame_context(
+            start_season=args.start_season,
+            end_season=args.end_season,
+            cutoff_hours=args.cutoff_hours,
+            as_of=args.as_of,
+        )
+        print(json.dumps(report, indent=2))
         return 0
     if args.command == "train":
         frame = _read_frame(args.data)
