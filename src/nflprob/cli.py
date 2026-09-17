@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from .audit import audit_dataset
 from .backtest import walk_forward_backtest
 from .data import build_nflverse_dataset
 from .development import (
@@ -50,6 +51,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_data.add_argument("--end-season", type=int, required=True)
     p_data.add_argument("--output", required=True)
     p_data.add_argument("--half-life", type=float, default=6.0)
+
+    p_audit = sub.add_parser(
+        "audit-data",
+        help="report coverage of quarterback, weather, experimental, and market fields",
+    )
+    p_audit.add_argument("--data", required=True)
 
     p_train = sub.add_parser("train", help="fit a model artifact")
     p_train.add_argument("--data", required=True)
@@ -122,6 +129,10 @@ def main(argv: list[str] | None = None) -> int:
         frame = build_nflverse_dataset(seasons, half_life_games=args.half_life)
         _write_frame(frame, args.output)
         print(json.dumps({"rows": len(frame), "output": args.output}, indent=2))
+        return 0
+    if args.command == "audit-data":
+        frame = _read_frame(args.data)
+        print(json.dumps(audit_dataset(frame), indent=2))
         return 0
     if args.command == "train":
         frame = _read_frame(args.data)
